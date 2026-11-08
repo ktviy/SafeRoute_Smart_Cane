@@ -1,0 +1,82 @@
+file,event,sensor_time_s,video_time_s,source,notes
+S03_swipe,turn_or_pause_1,37.79,,sensor,"cane leaves walking angle 51 deg, peaks 59 deg"
+S04_walk_swipe,sync_tap_start,4.88,,sensor,first of 3 taps
+S04_walk_swipe,sync_tap_end,87.91,,sensor,first of 3 taps
+S05_walk_tap,sync_tap_start,3.21,,sensor,first of 3 taps
+S05_walk_tap,sync_tap_end,114.04,,sensor,first of 3 taps
+S06_curb_stepdown_swipe,sync_tap_start,6.25,4.63,sensor,first of 3 taps
+S06_curb_stepdown_swipe,sync_tap_end,52.46,50.84,sensor,first of 3 taps
+S06_curb_stepdown_swipe,edge_1,18.8,17.18,sensor,"cane leaves walking angle 46 deg, peaks 60 deg"
+S06_curb_stepdown_swipe,edge_2,48.56,46.94,sensor,"cane leaves walking angle 45 deg, peaks 65 deg"
+S08_curb_stepup_tap,sync_tap_start,6.31,4.74,sensor,first of 3 taps
+S08_curb_stepup_tap,sync_tap_end,55.61,54.04,sensor,first of 3 taps
+S08_curb_stepup_tap,step_up_1,19.89,18.32,sensor,"cane leaves walking angle 42 deg, peaks 72 deg"
+S08_curb_stepup_tap,step_up_2,51.94,50.37,sensor,"cane leaves walking angle 43 deg, peaks 61 deg"
+S08_curb_stepup_swipe,sync_tap_start,5.22,3.16,sensor,first of 3 taps
+S08_curb_stepup_swipe,sync_tap_end,51.17,49.11,sensor,first of 3 taps
+S08_curb_stepup_swipe,step_up_1,19.67,17.61,sensor,"cane leaves walking angle 45 deg, peaks 67 deg"
+S09_side_object_left,sync_tap_start,4.0,3.52,sensor,first of 3 taps
+S09_side_object_left,sync_tap_end,45.67,45.19,sensor,first of 3 taps
+S09_side_object_right,sync_tap_start,4.33,4.82,sensor,first of 3 taps
+S09_side_object_right,sync_tap_end,46.12,,sensor,first of 3 taps
+S11_stairtop_swipe,sync_tap_start,6.23,4.32,sensor,first of 3 taps
+S11_stairtop_swipe,sync_tap_end,65.06,63.15,sensor,first of 3 taps
+S11_stairtop_swipe,edge_1,16.84,14.93,sensor,"cane leaves walking angle 43 deg, peaks 64 deg"
+S11_stairtop_swipe,edge_2,39.73,37.82,sensor,"cane leaves walking angle 43 deg, peaks 64 deg"
+S11_stairtop_swipe,edge_3,60.81,58.9,sensor,"cane leaves walking angle 40 deg, peaks 63 deg"
+S12_stairtop_tap,sync_tap_start,5.12,3.57,sensor,first of 3 taps
+S12_stairtop_tap,sync_tap_end,63.0,,sensor,first of 3 taps
+S12_stairtop_tap,edge_1,14.29,12.74,sensor,"cane leaves walking angle 35 deg, peaks 67 deg"
+S12_stairtop_tap,edge_2,32.98,31.43,sensor,"cane leaves walking angle 40 deg, peaks 67 deg"
+S12_stairtop_tap,edge_3,59.32,57.77,sensor,"cane leaves walking angle 41 deg, peaks 62 deg"
+S12_stairtop_tap,probe_4,59.47,57.92,sensor,"cane leaves walking angle 44 deg, peaks 62 deg"
+S13a_stair_descent,sync_tap_start,7.91,6.27,sensor,first of 3 taps
+S13a_stair_descent,sync_tap_end,40.36,38.72,sensor,first of 3 taps
+S13a_stair_descent,edge_1,16.5,14.86,sensor,"cane leaves walking angle 44 deg, peaks 83 deg"
+S13a_stair_descent,step_1,21.48,19.84,sensor,tip impact on a step
+S13a_stair_descent,step_2,23.08,21.44,sensor,tip impact on a step
+S13a_stair_descent,step_3,24.76,23.12,sensor,tip impact on a step
+S13a_stair_descent,step_4,26.27,24.63,sensor,tip impact on a step
+S13a_stair_descent,step_5,27.85,26.21,sensor,tip impact on a step
+S13a_stair_descent,step_6,29.36,27.72,sensor,tip impact on a step
+S13a_stair_descent,step_7,30.88,29.24,sensor,tip impact on a step
+S13a_stair_descent,step_8,32.45,30.81,sensor,tip impact on a step
+S13a_stair_descent,step_9,33.79,32.15,sensor,tip impact on a step
+S13a_stair_descent,step_10,35.43,33.79,sensor,tip impact on a step
+S13a_stair_descent,step_11,36.96,35.32,sensor,tip impact on a step
+S13a_stair_descent,step_12,39.19,37.54,sensor,tip impact on a step
+S13a_stair_descent,step_13,40.36,38.72,sensor,tip impact on a step
+S13b_stair_descent,sync_tap_start,4.95,3.5,sensor,first of 3 taps
+S13b_stair_descent,sync_tap_end,37.36,35.91,sensor,first of 3 taps
+S13b_stair_descent,edge_1,14.64,13.19,sensor,"cane leaves walking angle 42 deg, peaks 84 deg"
+S13b_stair_descent,step_1,18.67,17.22,sensor,tip impact on a step
+S13b_stair_descent,step_2,20.75,19.3,sensor,tip impact on a step
+S13b_stair_descent,step_3,22.36,20.91,sensor,tip impact on a step
+S13b_stair_descent,step_4,23.83,22.38,sensor,tip impact on a step
+S13b_stair_descent,step_5,25.3,23.85,sensor,tip impact on a step
+S13b_stair_descent,step_6,26.74,25.29,sensor,tip impact on a step
+S13b_stair_descent,step_7,28.11,26.66,sensor,tip impact on a step
+S13b_stair_descent,step_8,29.63,28.18,sensor,tip impact on a step
+S13b_stair_descent,step_9,30.49,29.04,sensor,tip impact on a step
+S13b_stair_descent,step_10,31.15,29.7,sensor,tip impact on a step
+S13b_stair_descent,step_11,32.65,31.2,sensor,tip impact on a step
+S13b_stair_descent,step_12,34.19,32.74,sensor,tip impact on a step
+S13b_stair_descent,step_13,35.64,34.19,sensor,tip impact on a step
+S13c_stair_descent,sync_tap_start,5.41,3.85,sensor,first of 3 taps
+S13c_stair_descent,sync_tap_end,38.91,37.35,sensor,first of 3 taps
+S13c_stair_descent,edge_1,16.39,14.83,sensor,"cane leaves walking angle 43 deg, peaks 86 deg"
+S13c_stair_descent,step_1,19.29,17.73,sensor,tip impact on a step
+S13c_stair_descent,step_2,20.69,19.13,sensor,tip impact on a step
+S13c_stair_descent,step_3,22.04,20.48,sensor,tip impact on a step
+S13c_stair_descent,step_4,23.45,21.88,sensor,tip impact on a step
+S13c_stair_descent,step_5,24.73,23.17,sensor,tip impact on a step
+S13c_stair_descent,step_6,26.05,24.49,sensor,tip impact on a step
+S13c_stair_descent,step_7,27.48,25.92,sensor,tip impact on a step
+S13c_stair_descent,step_8,28.85,27.29,sensor,tip impact on a step
+S13c_stair_descent,step_9,30.25,28.69,sensor,tip impact on a step
+S13c_stair_descent,step_10,31.61,30.05,sensor,tip impact on a step
+S13c_stair_descent,step_11,32.95,31.39,sensor,tip impact on a step
+S13c_stair_descent,step_12,34.42,32.86,sensor,tip impact on a step
+S13c_stair_descent,step_13,36.19,34.63,sensor,tip impact on a step
+S15_stairtop_parallel,sync_tap_start,6.15,4.87,sensor,first of 3 taps
+S15_stairtop_parallel,sync_tap_end,43.75,42.47,sensor,first of 3 taps

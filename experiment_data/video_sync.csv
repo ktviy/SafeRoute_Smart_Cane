@@ -1,0 +1,12 @@
+file,video_file,offset_s,impacts_matched,impacts_in_video,sync_taps_on_clicks,match_fraction,best_other_shift,confidence,video_duration_s,sensor_duration_s,sensor_tap_start_s,video_tap_start_s,sensor_tap_end_s,video_tap_end_s
+S06_curb_stepdown_swipe,S06_curb_stepdown_swipe.mp4,1.615,15,17,yes,0.88,0.67,high,52.88,56.14,6.25,4.64,52.46,50.84
+S08_curb_stepup_tap,S08_curb_stepup_tap.mp4,1.575,31,31,yes,1.0,0.5,high,55.92,59.79,6.31,4.73,55.61,54.04
+S08_curb_stepup_swipe,S08_curb_stepup_swipe.mp4,2.055,11,13,yes,0.85,0.75,high,50.88,56.22,5.22,3.17,51.17,49.12
+S09_side_object_left,S09_side_object_left.mp4,0.48,16,18,yes,0.89,0.57,high,46.72,49.26,4.0,3.52,45.67,45.19
+S09_side_object_right,S09_side_object_right.mp4,-0.49,13,17,yes,0.76,0.61,high,45.91,49.07,4.33,4.82,46.12,
+S11_stairtop_swipe,S11_stairtop_swipe.mp4,1.91,15,21,yes,0.71,0.33,high,64.83,69.89,6.23,4.32,65.06,63.15
+S12_stairtop_tap,S12_stairtop_tap.mp4,1.555,16,29,yes,0.55,0.21,high,60.38,67.15,5.12,3.56,63.0,
+S13a_stair_descent,S13a_stair_descent.mp4,1.645,17,26,yes,0.65,0.3,high,40.38,43.89,7.91,6.26,40.36,38.72
+S13b_stair_descent,S13b_stair_descent.mp4,1.45,13,31,yes,0.42,0.21,high,38.15,41.88,4.95,3.5,37.36,35.91
+S13c_stair_descent,S13c_stair_descent.mp4,1.565,17,27,yes,0.63,0.32,high,39.32,43.75,5.41,3.84,38.91,37.35
+S15_stairtop_parallel,S15_stairtop_parallel.mp4,1.28,10,14,yes,0.71,0.5,high,44.36,48.49,6.15,4.87,43.75,42.47

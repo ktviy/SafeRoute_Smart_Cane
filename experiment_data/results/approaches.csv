@@ -1,0 +1,15 @@
+file,scenario,technique,event,walk_start,walk_time_s
+S06_curb_stepdown_swipe,S6,constant,edge_1,still,11.6
+S06_curb_stepdown_swipe,S6,constant,edge_2,still,11.9
+S08_curb_stepup_tap,S8,two-point,step_up_1,still,11.3
+S08_curb_stepup_tap,S8,two-point,step_up_2,still,13.3
+S08_curb_stepup_swipe,S8,constant,step_up_1,still,12.0
+S11_stairtop_swipe,S11,constant,edge_1,still,11.0
+S11_stairtop_swipe,S11,constant,edge_2,still,8.5
+S11_stairtop_swipe,S11,constant,edge_3,still,8.2
+S12_stairtop_tap,S12,two-point,edge_1,still,10.0
+S12_stairtop_tap,S12,two-point,edge_2,still,10.3
+S12_stairtop_tap,S12,two-point,edge_3,still,8.5
+S13a_stair_descent,S13,constant,edge_1,still,7.7
+S13b_stair_descent,S13,constant,edge_1,still,9.1
+S13c_stair_descent,S13,constant,edge_1,still,14.0

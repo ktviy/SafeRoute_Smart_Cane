@@ -1,0 +1,8 @@
+{
+  "name": "saferoute",
+  "version": "1.0.0",
+  "description": "SafeRoute pod logic: attitude, ground/forward geometry, alert filter, haptic language, battery, button, telemetry. No hardware dependencies.",
+  "platforms": "*",
+  "frameworks": "*",
+  "build": { "srcDir": ".", "includeDir": "." }
+}

@@ -1,0 +1,19 @@
+﻿file,walker,date,scenario,description,reps_or_length,technique,surface,walker_height_cm,cane_length_cm,tip_type,pod_from_top_cm,tip_to_phone_mm,grip_to_phone_mm,phone_axis_along_shaft,tip_lift_cm,approach_distance_m,step_height_cm,step_count,inclinometer_deg,walk_distance_m,walk_speed_mps,walk_time_s,sample_rate_hz,video_file,notes
+S01_natural_angle,P1,10/30/2026,S1,Static angle NATURAL - tip on floor - hold still,10 s,static,,171,120,,33-48,720,330,y-,,,,,43.53,,,,100,,
+S01_high_angle,P1,10/30/2026,S1,Static angle HIGH - tip on floor - hold still,10 s,static,,171,120,,33-48,720,330,y-,,,,,59.45,,,,100,,
+S02_gyro,P1,10/30/2026,S2,Cane lying flat on floor - do not touch,10 s,none,,171,120,,33-48,720,330,y-,,,,,,,,,100,,
+S03_swipe,P1,10/30/2026,S3,Stand still and sweep normally,30 s,constant,,171,120,,33-48,720,330,y-,,,,,,,,,100,,
+S04_walk_swipe,P1,10/30/2026,S4,Walk corridor back and forth - constant contact,100 s,constant,,171,120,,33-48,720,330,y-,,,,,,,,,100,,
+S05_walk_tap,P1,10/30/2026,S5,Walk corridor back and forth - two-point touch,115 s,two-point,,171,120,,33-48,720,330,y-,5 to 8,,,,,,,,100,,
+S06_curb_stepdown_swipe,P1,10/30/2026,S6,Curb approach - find edge - step down,1 approach,constant,,171,120,,33-48,720,330,y-,,,15,,,,,,100,S06_curb_stepdown_swipe.mp4,
+S08_curb_stepup_tap,P1,10/30/2026,S8,Approach curb from below and step up (two-point),1 approach,two-point,,171,120,,33-48,720,330,y-,5 to 8,,15,,,,,,100,S08_curb_stepup_tap.mp4,no step-down two-point (S7) was recorded; this is the second step-up
+S08_curb_stepup_swipe,P1,10/30/2026,S8,Approach curb from below and step up,1 approach,constant,,171,120,,33-48,720,330,y-,,,15,,,,,,100,S08_curb_stepup_swipe.mp4,
+S09_side_object_left,P1,10/30/2026,S9,Walk past box to the LEFT of the walking line,1 pass,constant,,171,120,,33-48,720,330,y-,,,,,,,,,100,S09_side_object_left.mp4,
+S09_side_object_right,P1,10/30/2026,S9,Walk past box to the RIGHT of the walking line,1 pass,constant,,171,120,,33-48,720,330,y-,,,,,,,,,100,S09_side_object_right.mp4,
+S10_walk_speed,P1,10/30/2026,S10,Walk a measured 12.16 m at normal pace,2 runs,constant,,171,120,,33-48,720,330,y-,,,,,,12.16,0.78;0.84,15.59;14.48,100,,"timed by hand, no sensor file"
+S11_stairtop_swipe,P1,10/30/2026,S11,Approach top of stairs - stop when tip drops - walk back,3 approaches,constant,,171,120,,33-48,720,330,y-,,,14,13,,,,,100,S11_stairtop_swipe.mp4,
+S12_stairtop_tap,P1,10/30/2026,S12,Approach top of stairs - stop when tip drops - walk back,3 approaches,two-point,,171,120,,33-48,720,330,y-,5 to 8,,14,13,,,,,100,S12_stairtop_tap.mp4,
+S13a_stair_descent,P1,10/30/2026,S13,Full descent to bottom landing (1 of 3),1 descent,constant,,171,120,,33-48,720,330,y-,,,14,13,,,,,100,S13a_stair_descent.mp4,
+S13b_stair_descent,P1,10/30/2026,S13,Full descent to bottom landing (2 of 3),1 descent,constant,,171,120,,33-48,720,330,y-,,,14,13,,,,,100,S13b_stair_descent.mp4,
+S13c_stair_descent,P1,10/30/2026,S13,Full descent to bottom landing (3 of 3),1 descent,constant,,171,120,,33-48,720,330,y-,,,14,13,,,,,100,S13c_stair_descent.mp4,
+S15_stairtop_parallel,P1,10/30/2026,S15,Walk along top landing parallel to edge about 1 m away,1 pass,constant,,171,120,,33-48,720,330,y-,,,14,13,,,,,100,S15_stairtop_parallel.mp4,

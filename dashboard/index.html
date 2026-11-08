@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafeRoute Live</title>
+<!--
+  SafeRoute live dashboard (EE Task F14), no install: open this file in Chrome or Edge.
+    USB        Web Serial, 460800 baud (the pod's serial telemetry, 50 Hz)
+    Bluetooth  Web Bluetooth, Nordic UART service "SafeRoute" (10 Hz, smoothed on screen)
+    Replay     a .jsonl telemetry log recorded from the pod (Save log button, or dashboard.py)
+  Also: web_dashboard.html?replay=<log.jsonl> when served over http.
+
+  Live with the cane: the side view follows the cane angle, the top view follows the sweep
+  (yaw), and every alert plays its haptic rhythm as sound - same timing as the motors
+  (haptics/haptic_engine.cpp), left motor = left speaker. Click a card to hear a pattern.
+  Press M to mute. Everything is in this one file and works offline.
+  Geometry: 130 cm cane, L 0.72 m, grip -> pod 0.43 m, beams 19 / 73 deg (DATA REPORT v3).
+-->
+<style>
+  :root {
+    /* palette: creme #EEE4DA, sand #D8C4AC, dusty pink #C8A49F, burgundy #4D0E13 */
+    --creme: #EEE4DA; --sand: #D8C4AC; --pink: #C8A49F; --burg: #4D0E13;
+    --bg: var(--creme); --panel: #F7F1EB; --line: var(--sand); --text: #3A0B0F; --muted: #7D5E58;
+    --stage: #FBF8F4; --drop: var(--burg); --head: #8E4A47; --ground: #8E3B3F; --fwd: #B07F79;
+    --floor: #B59C80; --ink: #3A0B0F; --figure: #A08680;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--burg); }
+  header h1 { font-size: 19px; margin: 0 14px 0 0; color: var(--creme); font-weight: 500; letter-spacing: 2.5px;
+              text-transform: uppercase; }
+  button, select, input[type=text], input[type=number] {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 12px; font: inherit; }
+  header button, header select { background: transparent; color: var(--creme); border-color: rgba(238,228,218,.45); }
+  header select option { color: var(--text); }
+  header button.on { background: var(--creme); color: var(--burg); border-color: var(--creme); }
+  header input[type=range] { width: 80px; accent-color: var(--creme); }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--burg); }
+  header button:hover:not(:disabled) { border-color: var(--creme); }
+  header button:not(.on):hover:not(:disabled) { background: rgba(238,228,218,.1); }
+  button:disabled { opacity: .45; cursor: default; }
+  #conn { color: var(--sand); margin-left: auto; font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 14px; padding: 14px 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { #banner { flex-wrap: wrap; } #banner .big { font-size: 22px; } }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.6px; color: var(--muted); margin: 0 0 10px;
+              font-weight: 600; }
+  #banner { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+            border-radius: 14px; background: var(--panel); border: 2px solid var(--line); }
+  #banner .big { font-size: 30px; font-weight: 600; letter-spacing: 1px; color: var(--burg); }
+  #banner .sub { color: var(--muted); }
+  #banner.drop { border-color: var(--burg); background: var(--burg); }
+  #banner.drop .big, #banner.drop .sub, #banner.drop #motors { color: var(--creme); }
+  #banner.head { border-color: var(--burg); background: var(--pink); }
+  #banner.paused { border-color: var(--pink); }
+  .chip { display: inline-block; padding: 3px 11px; border-radius: 99px; font-weight: 700; font-size: 12px; letter-spacing: 1px; }
+  .chip.smart { background: var(--burg); color: var(--creme); }
+  .chip.naive { background: var(--pink); color: var(--burg); }
+  #banner.drop .chip.smart { background: var(--creme); color: var(--burg); }
+  #motors { margin-left: auto; display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+  .motor { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--pink); transition: transform 40ms; }
+  .motor.buzz { transform: scale(1.18); }
+  canvas { width: 100%; display: block; }
+
+  /* side view in a video-player frame */
+  .player { position: relative; aspect-ratio: 16 / 9; background: var(--stage); border: 8px solid var(--burg);
+            border-radius: 18px; overflow: hidden; box-shadow: 0 10px 28px rgba(77,14,19,.18); }
+  .player canvas { position: absolute; inset: 0; width: 100%; height: calc(100% - 42px); }
+  .player .tag { position: absolute; top: 10px; left: 12px; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
+                 color: var(--muted); font-weight: 600; }
+  .player .live { position: absolute; top: 9px; right: 12px; font-size: 11px; font-weight: 700; letter-spacing: 1.4px;
+                  padding: 3px 9px; border-radius: 6px; background: var(--sand); color: var(--burg); }
+  .player .live.on { background: var(--burg); color: var(--creme); }
+  .player .live.on::before { content: "● "; animation: blink 1.4s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .player .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 42px; background: var(--burg); color: var(--creme);
+                 display: flex; align-items: center; gap: 16px; padding: 6px 14px 0; font-size: 13px;
+                 font-variant-numeric: tabular-nums; }
+  .player .bar .grow { flex: 1; }
+  .player .bar b { font-weight: 600; }
+  .player .track { position: absolute; left: 0; right: 0; top: 0; height: 4px; background: rgba(238,228,218,.25); }
+  .player .track i { display: block; height: 100%; width: 0; background: var(--pink); }
+  @media (max-width: 600px) { .player { aspect-ratio: 4 / 3; } .player .bar .hide-sm, .player .tag { display: none; } }
+
+  /* top view (sweep) */
+  .topwrap { position: relative; aspect-ratio: 16 / 8; background: var(--stage); border: 1px solid var(--line); border-radius: 12px;
+             overflow: hidden; }
+  .topwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  @media (max-width: 600px) { .topwrap { aspect-ratio: 4 / 3; } }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; font-size: 13px; color: var(--muted);
+           font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--text); font-weight: 650; }
+
+  /* what the user feels */
+  .feel { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; }
+  .card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--stage);
+          display: flex; flex-direction: column; gap: 6px; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+  .card:hover { border-color: var(--pink); }
+  .card .t { font-weight: 650; font-size: 14px; }
+  .card .m { font-size: 12px; color: var(--muted); }
+  .card .foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: auto;
+                font-variant-numeric: tabular-nums; }
+  .card .now { display: none; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; padding: 1px 7px; border-radius: 5px;
+               background: var(--creme); color: var(--burg); }
+  .card.active { background: var(--burg); border-color: var(--burg); color: var(--creme); }
+  .card.active .m, .card.active .foot { color: var(--sand); }
+  .card.active .now { display: inline-block; }
+  .pulse { position: relative; display: flex; align-items: flex-end; height: 26px; gap: 0; border-bottom: 1px solid var(--line); }
+  .pulse span { display: block; }
+  .pulse span.on { background: var(--burg); border-radius: 2px 2px 0 0; }
+  .card.active .pulse span.on { background: var(--creme); }
+  .card.active .pulse { border-color: rgba(238,228,218,.4); }
+  .pulse .head { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--pink); left: 0; display: none; }
+  .card.active .pulse .head { display: block; animation: sweep var(--dur) linear infinite; }
+  @keyframes sweep { from { left: 0; } to { left: calc(100% - 2px); } }
+  .sides { display: flex; gap: 4px; font-size: 10px; letter-spacing: 1px; }
+  .sides i { font-style: normal; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+  .card.active .sides i { border-color: rgba(238,228,218,.35); color: var(--sand); }
+  .card.active .sides i.lit { background: var(--creme); color: var(--burg); border-color: var(--creme); }
+
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .metric { background: var(--stage); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .metric .k { color: var(--muted); font-size: 12px; }
+  .metric .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  td.num { text-align: right; }
+  #ratio { margin-top: 8px; font-size: 14px; color: var(--muted); }
+  #ratio b { color: var(--burg); font-size: 18px; }
+  #chart { height: 230px; margin-top: 10px; }
+  #alerts { max-height: 140px; overflow: auto; font-size: 13px; }
+  #alerts div { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  #console { height: 120px; overflow: auto; background: var(--stage); border: 1px solid var(--line); border-radius: 8px;
+             padding: 6px 8px; font: 12px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+  .row input[type=text] { flex: 1; min-width: 120px; }
+  .geo { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); align-items: center; margin-top: 12px; }
+  .geo input { width: 70px; padding: 4px 6px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SafeRoute Live</h1>
+  <button id="bSerial">USB</button>
+  <button id="bBle">Bluetooth</button>
+  <label><button id="bFile" type="button">Replay file…</button>
+    <input id="file" type="file" accept=".jsonl,.json,.txt,.log" hidden></label>
+  <select id="speed" title="Replay speed"><option value="1">1×</option><option value="2">2×</option><option value="0.5">0.5×</option></select>
+  <button id="bPause" disabled>Pause</button>
+  <button id="bSave">Save log</button>
+  <button id="bSound" class="on" title="Alert sounds follow the vibration rhythm (M to mute)">♪ Sound on</button>
+  <input id="vol" type="range" min="0" max="1" step="0.05" value="0.7" title="Volume">
+  <span id="conn">Not connected. Use Chrome or Edge for USB and Bluetooth.</span>
+</header>
+
+<main>
+  <div id="banner" class="ok">
+    <div>
+      <div class="big" id="bannerText">Waiting for data</div>
+      <div class="sub" id="bannerSub">Connect the pod, or replay a log</div>
+    </div>
+    <span class="chip smart" id="modeChip">SMART</span>
+    <div id="motors">motors <div class="motor" id="mL" title="left motor / left speaker"></div><div class="motor" id="mR" title="right motor / right speaker"></div></div>
+  </div>
+
+  <section class="col">
+    <div class="panel">
+      <div class="player">
+        <canvas id="scene"></canvas>
+        <div class="tag">Side view · cane angle, ground beam, head-level beam</div>
+        <div class="live" id="liveTag">NO SIGNAL</div>
+        <div class="bar">
+          <div class="track"><i id="progress"></i></div>
+          <span id="pT">t –</span><span id="pA">α –</span><span class="grow hide-sm" id="pSt"></span>
+          <span id="pHz" class="hide-sm"></span><span id="pMode"></span>
+        </div>
+      </div>
+      <div class="geo">
+        Geometry (130 cm cane, from calibration): L <input id="gL" type="number" step="0.01" value="0.72"> m
+        β <input id="gB" type="number" step="0.5" value="19">°
+        γ <input id="gG" type="number" step="0.5" value="73">°
+        grip→pod <input id="gP" type="number" step="0.01" value="0.43"> m
+        head <input id="gH" type="number" step="0.01" value="1.80"> m
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Top view · the sweep</h2>
+      <div class="topwrap"><canvas id="top"></canvas></div>
+      <div class="stats">
+        <span>sweep <b id="sW">–</b></span><span>rate <b id="sR">–</b></span>
+        <span>cane now <b id="sY">–</b></span><span>technique <b id="sT">–</b></span>
+      </div>
+      <div class="note">Seen from above: the cane follows the pod's yaw (sweep centre = straight up). Dots trail the
+        last 3 s of the tip and of the ground-beam spot; the shaded wedge is the ±35° drop corridor, the strip the
+        0.3 m head-level corridor.</div>
+    </div>
+
+    <div class="panel">
+      <h2>What the user feels (and hears here)</h2>
+      <div class="feel" id="feel"></div>
+      <div class="row">
+        Haptics <select id="plan" title="Plan A: left/right motors. Plan B: rhythm only (haptic gate result)">
+          <option value="A">Plan A · left / right</option><option value="B">Plan B · rhythm only</option></select>
+      </div>
+      <div class="note">The pod's vibration language (haptics/haptic_engine.cpp). A card turns dark while the user is
+        feeling it, and the dashboard plays the same rhythm (left motor = left speaker). Click a card to hear it.</div>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="panel">
+      <h2>Now</h2>
+      <div class="grid">
+        <div class="metric"><div class="k">Cane angle α</div><div class="v" id="vA">–</div></div>
+        <div class="metric"><div class="k">Ground Δh</div><div class="v" id="vDh">–</div></div>
+        <div class="metric"><div class="k">Technique</div><div class="v" id="vTech">–</div></div>
+        <div class="metric"><div class="k">Walking speed</div><div class="v" id="vV">–</div></div>
+        <div class="metric"><div class="k">Pod state</div><div class="v" id="vSt" style="font-size:16px">–</div></div>
+        <div class="metric"><div class="k">Battery</div><div class="v" id="vB">–</div></div>
+        <div class="metric"><div class="k">Ground return</div><div class="v" id="vGq">–</div></div>
+        <div class="metric"><div class="k">Head-level hit</div><div class="v" id="vHf">–</div></div>
+        <div class="metric"><div class="k">Ground laser</div><div class="v" id="vDg">–</div></div>
+        <div class="metric"><div class="k">Head laser</div><div class="v" id="vDf">–</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Smart vs naive</h2>
+      <table>
+        <tr><th>mode</th><th class="num">time</th><th class="num">alerts</th><th class="num">per min</th><th class="num">buzzing</th></tr>
+        <tr><td><span class="chip naive">NAIVE</span></td><td class="num" id="abNt">0 s</td><td class="num" id="abNa">0</td><td class="num" id="abNr">–</td><td class="num" id="abNb">–</td></tr>
+        <tr><td><span class="chip smart">SMART</span></td><td class="num" id="abSt">0 s</td><td class="num" id="abSa">0</td><td class="num" id="abSr">–</td><td class="num" id="abSb">–</td></tr>
+      </table>
+      <div id="ratio">Press Naive / Smart to switch modes on the same walk.
+        Tap the cane (two-point touch): that is where a naive pod buzzes at every lifted tip.</div>
+      <div class="row"><button id="bAbReset">Reset counts</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>Alerts</h2>
+      <div id="alerts"><div style="color:var(--muted)">None yet</div></div>
+      <canvas id="chart"></canvas>
+      <div class="note">Last 15 s: ground Δh (dots, alert below −8 cm), cane angle α (pause above 52°) and the
+        sweep (yaw offset, ±35° corridor).</div>
+    </div>
+
+    <div class="panel">
+      <h2>Commands</h2>
+      <div class="row">
+        <button data-cmd="smart">Smart</button><button data-cmd="naive">Naive</button>
+        <button data-cmd="cal">Calibrate</button><button data-cmd="bat">Battery</button>
+        <button data-cmd="test l">Test L</button><button data-cmd="test r">Test R</button><button data-cmd="test b">Test both</button>
+        <button data-cmd="plan a">Plan A</button><button data-cmd="plan b">Plan B</button><button data-cmd="stat">stat</button>
+      </div>
+      <div class="row"><input id="cmd" type="text" placeholder="any command, e.g. set head 1.65"><button id="bSend">Send</button></div>
+      <div id="console"></div>
+      <div class="note">USB shows the pod's replies here; over Bluetooth the pod answers on USB only.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const ALERT = { 0: ["Path clear", "ok"], 1: ["DROP-OFF AHEAD", "drop"], 2: ["HEAD-LEVEL · LEFT", "head"],
+                3: ["HEAD-LEVEL · RIGHT", "head"], 4: ["HEAD-LEVEL · AHEAD", "head"], 5: ["DROP-OFF · SLOW DOWN", "drop"] };
+const STATE = { 0: "booting", 1: "ok", 2: "paused: edge found", 3: "ALERT", 4: "calibrating", 5: "sensor fault",
+                6: "low battery", 7: "not calibrated", 8: "off", 9: "standby: click the button or tap 5 times" };
+const TECH = { "-": "–", S: "still", W: "sweeping", T: "tapping", H: "holding" };
+// config.h, 130 cm cane (DATA REPORT v3)
+const WINDOW_MS = 15000, DROP_M = 0.08, PAUSE_DEG = 52, CANE_M = 1.30, HAND_AHEAD_M = 0.25;
+const GROUND_CORRIDOR_DEG = 35, FORWARD_CORRIDOR_M = 0.30, TRAIL_MS = 3000;
+
+// ------------------------------------------------------------------ haptic patterns
+// Exactly haptics/haptic_engine.cpp. steps: [left, right, ms]; 1 strong, 0.62 medium, 0.38 soft.
+const S_ = 1, M_ = 0.62, s_ = 0.38;
+function rep(n, on, off, l = S_, r = S_) { const a = []; for (let i = 0; i < n; i++) a.push([l, r, on], [0, 0, off]); return a; }
+function pattern(key, plan, n = 1) {
+  const A = plan !== "B";
+  // pod sends "hb" = ms: head-level alert is one continuous medium buzz that long
+  if (S.hb > 0 && /^head[LRC]$/.test(key)) return { steps: [[key === "headR" ? 0 : M_, key === "headL" ? 0 : M_, S.hb]], f: 330 };
+  const head = (l, r) => A ? { steps: [[l, r, 250], [0, 0, 120], [l, r, 250], [0, 0, 380]], repeat: true, f: 330 }
+                           : { steps: [[M_, M_, 500], [0, 0, 500]], repeat: true, f: 330 };
+  switch (key) {
+    case "drop":   { const s = rep(3, 80, 60); s[s.length - 1][2] = 240; return { steps: s, repeat: true, f: 392 }; }
+    case "urgent": { const s = rep(4, 60, 40); s[s.length - 1][2] = 120; return { steps: s, repeat: true, f: 466 }; }
+    case "headL":  return head(M_, 0);
+    case "headR":  return head(0, M_);
+    case "headC":  return head(M_, M_);
+    case "blind":  return { steps: [[s_, s_, 600], [0, 0, 300]], f: 262 };
+    case "lowbat": return { steps: rep(3, 500, 400, s_, s_), f: 262 };
+    case "slow":   return { steps: rep(2, 400, 300, s_, s_), f: 262 };
+    case "ack":    return A ? { steps: [[M_, 0, 100], [0, 0, 60], [0, M_, 100], [0, 0, 200]], f: 523 }
+                            : { steps: [[M_, M_, 80], [0, 0, 80], [M_, M_, 80], [0, 0, 200]], f: 523 };
+    case "smart":  return { steps: rep(2, 80, 100, M_, M_), f: 523 };
+    case "naive":  return { steps: rep(3, 80, 100, M_, M_), f: 523 };
+    case "error":  return { steps: [[M_, M_, 700], [0, 0, 300]], f: 262 };
+    case "boot":   return { steps: [[s_, s_, 150], [0, 0, 100]], f: 262 };
+    case "battery": {                                     // N pulses = level (one long buzz if unknown)
+      const s = n ? rep(Math.min(n, 10), 150, 250, M_, M_) : [[M_, M_, 900]];
+      s.push([0, 0, 300]);
+      return { steps: s, f: 349 };
+    }
+    case "mode":   return { steps: rep(Math.min(n, 5), 80, 100, M_, M_), f: 523 };
+    case "test":   return { steps: [[n & 1 ? S_ : 0, n & 2 ? S_ : 0, 300], [0, 0, 50]], f: 440 };
+    case "testL":  return { steps: [[S_, 0, 300], [0, 0, 50]], f: 440 };
+    case "testR":  return { steps: [[0, S_, 300], [0, 0, 50]], f: 440 };
+    case "testB":  return { steps: [[S_, S_, 300], [0, 0, 50]], f: 440 };
+  }
+  return null;
+}
+const ALERT_KEY = { 1: "drop", 5: "urgent", 2: "headL", 3: "headR", 4: "headC" };
+// One-shot cues from the pod (telemetry hp = haptic_engine.h Pattern id, hn = count, hs = start counter)
+const CUE_KEY = { 5: "battery", 6: "lowbat", 7: "ack", 8: "error", 9: "boot", 10: "mode", 11: "test", 13: "slow", 14: "blind" };
+
+// What the user feels: cards (Plan A shapes; the head card follows the plan selector)
+const FEEL = [
+  { id: "drop", key: "drop", title: "Drop-off ahead", codes: [1], how: "3 fast strong pulses, both motors, repeating",
+    why: "Curb, stair or platform edge in the path" },
+  { id: "urgent", key: "urgent", title: "Drop-off · slow down", codes: [5], how: "4 rapid strong pulses, both motors, repeating",
+    why: "Edge close at this walking speed (under 0.6 s)" },
+  { id: "head", key: "headC", title: "Head-level obstacle", codes: [2, 3, 4], sides: true,
+    how: "2 medium pulses on the obstacle's side, repeating", why: "Something between waist and head height ahead" },
+  { id: "blind", key: "blind", title: "Pod blind", st: 5, how: "1 soft long pulse, then every minute",
+    why: "A sensor is down: the pod is not protecting the user" },
+  { id: "lowbat", key: "lowbat", title: "Low battery", st: 6, how: "3 soft long pulses, every 5 min",
+    why: "Below 15%: charge soon" },
+];
+const feelOf = a => FEEL.find(k => k.codes && k.codes.includes(a));
+
+const $ = id => document.getElementById(id);
+const S = {
+  last: null, hist: [], rec: [], send: null, prevT: null, prevAlert: 0, prevSt: null, prevMode: null,
+  ab: { s: { ms: 0, n: 0, on: 0 }, n: { ms: 0, n: 0, on: 0 } }, alerts: [], dirty: false,
+  replay: null, feel: {}, plan: "A", arrivals: [], lastArrival: 0, trail: [], disp: null, faultSince: null, blindAt: 0,
+  live: false,
+};
+
+// ------------------------------------------------------------------ sound: the rhythm the user feels
+const AUD = { ctx: null, on: true, vol: 0.7, master: null, voices: null, cur: null, timer: null, sched: [] };
+function audioInit() {
+  if (AUD.ctx) { if (AUD.ctx.state === "suspended") AUD.ctx.resume(); return; }
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return;
+  const ctx = new C();
+  AUD.ctx = ctx;
+  AUD.master = ctx.createGain();
+  AUD.master.gain.value = AUD.on ? AUD.vol : 0;
+  const comp = ctx.createDynamicsCompressor();
+  AUD.master.connect(comp); comp.connect(ctx.destination);
+  AUD.voices = [-0.85, 0.85].map(pan => {               // left motor -> left speaker, right -> right
+    const g = ctx.createGain(); g.gain.value = 0;
+    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(AUD.master); }
+    else g.connect(AUD.master);
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o1.type = "triangle"; o2.type = "square"; g2.gain.value = 0.10;   // a little buzz, like a motor
+    o1.connect(g); o2.connect(g2); g2.connect(g);
+    o1.start(); o2.start();
+    return { g, o1, o2 };
+  });
+  if (AUD.cur) playKey(AUD.cur.key, AUD.cur.oneShot);   // restart on the audio clock
+}
+const clock = () => AUD.ctx ? AUD.ctx.currentTime : performance.now() / 1000;
+function setSound(on) {
+  AUD.on = on;
+  if (on) audioInit();
+  if (AUD.master) AUD.master.gain.setTargetAtTime(on ? AUD.vol : 0, AUD.ctx.currentTime, 0.01);
+  $("bSound").textContent = on ? "♪ Sound on" : "♪ Sound off";
+  $("bSound").classList.toggle("on", on);
+}
+function stopRhythm() {
+  clearInterval(AUD.timer); AUD.timer = null; AUD.cur = null; AUD.sched = [];
+  if (!AUD.ctx || !AUD.voices) return;
+  const now = AUD.ctx.currentTime;
+  for (const v of AUD.voices) {
+    v.g.gain.cancelScheduledValues(now);
+    v.g.gain.setValueAtTime(v.g.gain.value, now);
+    v.g.gain.linearRampToValueAtTime(0, now + 0.012);
+  }
+}
+// oneShot: play a repeating pattern `oneShot` times (card preview), else follow its repeat flag
+function playKey(key, oneShot = 0, n = 1) {
+  const pat = pattern(key, S.plan, n);
+  if (!pat) return;
+  stopRhythm();
+  AUD.cur = { key, pat, i: 0, t: clock() + 0.012, cycles: 0, oneShot, n };
+  pump();
+  AUD.timer = setInterval(pump, 25);
+}
+function pump() {
+  const c = AUD.cur;
+  if (!c) return;
+  const now = clock();
+  AUD.sched = AUD.sched.filter(x => x[1] > now - 0.05);
+  while (c.t < now + 0.15) {
+    if (c.i >= c.pat.steps.length) {
+      c.cycles++;
+      const more = c.oneShot ? c.cycles < c.oneShot : c.pat.repeat;
+      if (!more) { clearInterval(AUD.timer); AUD.timer = null; AUD.cur = null; return; }
+      c.i = 0;
+    }
+    const [l, r, ms] = c.pat.steps[c.i++];
+    const t0 = c.t, dur = ms / 1000;
+    if (l || r) AUD.sched.push([t0, t0 + dur, l, r]);
+    if (AUD.ctx && AUD.voices) [l, r].forEach((lv, k) => {
+      if (!lv) return;
+      const v = AUD.voices[k];
+      v.o1.frequency.setValueAtTime(c.pat.f, t0); v.o2.frequency.setValueAtTime(c.pat.f, t0);
+      v.g.gain.setValueAtTime(0, t0);
+      v.g.gain.linearRampToValueAtTime(lv, t0 + 0.004);
+      v.g.gain.setValueAtTime(lv, t0 + dur - 0.008);
+      v.g.gain.linearRampToValueAtTime(0, t0 + dur);
+    });
+    c.t += dur;
+  }
+}
+function motorLevels() {                                 // what the motors do right now (same timeline as the sound)
+  const now = clock();
+  for (const [a, b, l, r] of AUD.sched) if (now >= a && now < b) return [l, r];
+  return [0, 0];
+}
+// alert / state changes -> rhythm
+function soundFor(f) {
+  const a = f.alert || 0, key = ALERT_KEY[a];
+  if (a !== S.prevAlert) {
+    if (key) playKey(key);
+    else if (AUD.cur && Object.values(ALERT_KEY).includes(AUD.cur.key)) stopRhythm();
+  }
+  if (a) return;
+  if (f.hs != null) {                                           // new firmware: the pod says which cue it plays
+    S.hasCues = true;
+    const fresh = S.prevHs != null && f.hs !== S.prevHs;        // a new cue
+    if (fresh && CUE_KEY[f.hp]) playKey(CUE_KEY[f.hp], 0, f.hn || 0);
+    return;
+  }
+  const busy = AUD.cur && AUD.cur.pat.repeat === undefined;   // older logs: infer cues from state changes
+  if (S.prevMode && f.m && f.m !== S.prevMode && !busy) playKey(f.m === "n" ? "naive" : "smart");
+  if (f.st === 1 && S.prevSt === 4 && !busy) playKey("ack");    // calibration finished
+  if (f.st === 6 && S.prevSt !== 6) playKey("lowbat");
+  if (f.st === 5) {                                             // pod blind: after 3 s, then every 60 s
+    const now = performance.now();
+    if (S.faultSince == null) S.faultSince = now;
+    if (now - S.faultSince > 3000 && now - S.blindAt > 60000) { S.blindAt = now; playKey("blind"); }
+  } else S.faultSince = null;
+}
+
+// ------------------------------------------------------------------ cards
+function buildFeel() {
+  $("feel").innerHTML = FEEL.map(k => {
+    const pat = pattern(k.key, S.plan);
+    const total = pat.steps.reduce((s, x) => s + x[2], 0);
+    const bars = pat.steps.map(([l, r, ms]) => {
+      const lv = Math.max(l, r);
+      return `<span class="${lv ? "on" : ""}" style="flex:${ms} 0 0;height:${Math.round(lv * 100)}%"></span>`;
+    }).join("");
+    const how = k.id === "head" && S.plan === "B" ? "Plan B: 1 long medium pulse, both motors, repeating" : k.how;
+    const sides = k.sides && S.plan !== "B" ? `<div class="sides"><i data-side="2">LEFT</i><i data-side="4">AHEAD</i><i data-side="3">RIGHT</i></div>` : "";
+    return `<button type="button" class="card" id="feel-${k.id}" data-key="${k.key}" title="Click to hear it">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span class="t">${k.title}</span><span class="now">NOW</span></div>
+      <div class="pulse" style="--dur:${total}ms">${bars}<span class="head"></span></div>
+      <div class="m">${how}</div>${sides}<div class="m">${k.why}</div>
+      <div class="foot"><span id="feelN-${k.id}">0×</span><span id="feelL-${k.id}">–</span></div></button>`;
+  }).join("");
+  document.querySelectorAll(".card").forEach(c => c.onclick = () => { audioInit(); playKey(c.dataset.key, 2); });
+  S.dirty = true;
+}
+function countFeel(id, t) {
+  const c = S.feel[id] || (S.feel[id] = { n: 0, last: null });
+  c.n++; c.last = t;
+}
+function setPlan(p) {
+  p = p === "B" ? "B" : "A";
+  if (p === S.plan) return;
+  S.plan = p; $("plan").value = p;
+  buildFeel();
+  if (AUD.cur && AUD.cur.pat.repeat) playKey(AUD.cur.key);
+}
+
+// ------------------------------------------------------------------ input
+function onLine(raw) {
+  const line = raw.trim();
+  if (!line) return;
+  if (line[0] !== "{") {
+    logConsole(line);
+    const m = line.match(/plan=([AB])/);                     // boot / stat lines report the haptic plan
+    if (m) setPlan(m[1]);
+    return;
+  }
+  let f;
+  try { f = JSON.parse(line); } catch (e) { return; }
+  if (typeof f.t !== "number") return;
+  S.rec.push(line);
+  onFrame(f);
+}
+
+// The pod was switched off (double click: it sends "st":8 for 1 s, then nothing): back to the blank
+// start view - no cane, no charts, no sound.
+const INIT_HTML = {};
+function dashOff() {
+  S.lastArrival = performance.now();
+  if (S.off) return;
+  S.off = true;
+  stopRhythm();
+  Object.assign(S, { last: null, hist: [], trail: [], alerts: [], feel: {}, disp: null, prevT: null, prevAlert: 0,
+                     prevSt: null, prevHs: null, arrivals: [] });
+  S.ab = { s: { ms: 0, n: 0, on: 0 }, n: { ms: 0, n: 0, on: 0 } };
+  for (const [id, html] of Object.entries(INIT_HTML)) $(id).innerHTML = html;
+  buildFeel();
+  $("banner").className = "ok";
+  $("bannerText").textContent = "Pod off";
+  $("bannerSub").textContent = "Click the pod button to start";
+  $("liveTag").textContent = "OFF";
+  $("liveTag").className = "live";
+  for (const id of ["scene", "top", "chart"]) { const c = $(id); c.getContext("2d").clearRect(0, 0, c.width, c.height); }
+  for (const id of ["mL", "mR"]) { $(id).style.background = "transparent"; $(id).classList.remove("buzz"); }
+}
+
+function onFrame(f) {
+  if (f.st === 8) { dashOff(); return; }
+  S.off = false;
+  const nowMs = performance.now();
+  S.arrivals.push(nowMs);
+  while (S.arrivals.length && S.arrivals[0] < nowMs - 2000) S.arrivals.shift();
+  S.lastArrival = nowMs;
+  const mode = f.m === "n" ? "n" : "s";
+  if (S.prevT !== null && f.t > S.prevT && f.t - S.prevT < 1000) {
+    S.ab[mode].ms += f.t - S.prevT;
+    if (S.prevAlert) S.ab[mode].on += f.t - S.prevT;          // time the motors were buzzing
+  }
+  if (S.prevT !== null && f.t < S.prevT) { S.hist = []; S.trail = []; }   // log restarted
+  S.prevT = f.t;
+  const a = f.alert || 0;
+  if (a && a !== S.prevAlert && !(isDrop(a) && isDrop(S.prevAlert))) {
+    S.ab[mode].n++;
+    S.alerts.unshift({ t: f.t, a, mode });
+    S.alerts.length = Math.min(S.alerts.length, 30);
+  }
+  if (a && a !== S.prevAlert && feelOf(a)) countFeel(feelOf(a).id, f.t);
+  for (const k of FEEL) if (k.st != null && f.st === k.st && S.prevSt !== k.st) countFeel(k.id, f.t);
+  if (f.pl === "A" || f.pl === "B") setPlan(f.pl);
+  S.hb = f.hb || 0;              // plan changed on the pod (triple click)
+  soundFor(f);
+  if (f.hs != null) S.prevHs = f.hs;
+  S.prevAlert = a;
+  S.prevSt = f.st;
+  S.prevMode = f.m || S.prevMode;
+  S.hist.push({ t: f.t, dh: f.dh, a: f.a, yo: f.yo, alert: a });
+  while (S.hist.length && S.hist[0].t < f.t - WINDOW_MS) S.hist.shift();
+  S.last = f;
+  if (!S.disp && f.a != null) S.disp = { a: f.a, yo: f.yo || 0 };
+  S.dirty = true;
+}
+const isDrop = a => a === 1 || a === 5;
+
+function logConsole(s) {
+  const c = $("console");
+  c.textContent += s + "\n";
+  if (c.textContent.length > 20000) c.textContent = c.textContent.slice(-15000);
+  c.scrollTop = c.scrollHeight;
+}
+
+function lineSplitter() {
+  let buf = "";
+  return chunk => {
+    buf += chunk;
+    let k;
+    while ((k = buf.indexOf("\n")) >= 0) { onLine(buf.slice(0, k)); buf = buf.slice(k + 1); }
+    if (buf.length > 4096) buf = "";
+  };
+}
+
+function setConn(text, live) {
+  $("conn").textContent = text;
+  S.live = live;
+  document.querySelectorAll("[data-cmd], #bSend").forEach(b => b.disabled = !live);
+}
+
+async function connectSerial() {
+  audioInit();
+  try {
+    stopReplay();
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 460800 });
+    // DevKit V1 auto-reset: DTR/RTS drive EN and GPIO0 through the CP2102. Release both so the
+    // board runs normally (some drivers leave the chip held in reset or boot mode after open).
+    try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch (e) {}
+    const enc = new TextEncoder(), writer = port.writable.getWriter();
+    S.send = s => writer.write(enc.encode(s + "\n"));
+    resetAll();
+    setConn("USB connected, waiting for the pod…", true);
+    let bytes = 0;
+    const quiet = setTimeout(() => { if (!bytes) setConn("USB connected but nothing received: press EN on the board, " +
+      "or check with the PlatformIO monitor", true); }, 3000);
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable).catch(() => {});
+    const reader = dec.readable.getReader(), feed = lineSplitter();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!bytes) { clearTimeout(quiet); setConn("USB connected, receiving", true); }
+      bytes += value.length;
+      feed(value);
+    }
+    setConn("USB disconnected", false);
+  } catch (e) { setConn("USB: " + e.message, false); }
+}
+
+async function connectBle() {
+  audioInit();
+  try {
+    stopReplay();
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "SafeRoute" }], optionalServices: [NUS] });
+    setConn("Bluetooth: connecting…", false);
+    const svc = await (await dev.gatt.connect()).getPrimaryService(NUS);
+    const tx = await svc.getCharacteristic(NUS_TX), rx = await svc.getCharacteristic(NUS_RX);
+    const dec = new TextDecoder(), feed = lineSplitter();
+    tx.addEventListener("characteristicvaluechanged", e => feed(dec.decode(e.target.value)));
+    await tx.startNotifications();
+    S.send = async s => {
+      const b = new TextEncoder().encode(s + "\n");
+      for (let i = 0; i < b.length; i += 20) await rx.writeValueWithoutResponse(b.slice(i, i + 20));
+    };
+    dev.addEventListener("gattserverdisconnected", () => { setConn("Bluetooth disconnected", false); stopRhythm(); });
+    resetAll();
+    setConn("Bluetooth connected: " + (dev.name || "SafeRoute"), true);
+  } catch (e) { setConn("Bluetooth: " + e.message, false); }
+}
+
+// ------------------------------------------------------------------ replay
+function startReplay(text, name) {
+  stopReplay();
+  const frames = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim().startsWith("{")) continue;
+    try { const f = JSON.parse(line); if (typeof f.t === "number") frames.push(f); } catch (e) {}
+  }
+  if (!frames.length) { setConn("Replay: no telemetry lines in " + name, false); return; }
+  resetAll();
+  S.replay = { frames, i: 0, wall0: performance.now(), t0: frames[0].t, paused: false, name };
+  $("bPause").disabled = false;
+  $("bPause").textContent = "Pause";
+  setConn(`Replay: ${name} (${frames.length} frames)`, false);
+  requestAnimationFrame(replayTick);
+}
+function replayTick(now) {
+  const r = S.replay;
+  if (!r) return;
+  if (!r.paused) {
+    const target = r.t0 + (now - r.wall0) * Number($("speed").value);
+    while (r.i < r.frames.length && r.frames[r.i].t <= target) onFrame(r.frames[r.i++]);
+    if (r.i >= r.frames.length) {
+      setConn(`Replay finished: ${r.name}`, false); $("bPause").disabled = true; S.replay = null; stopRhythm(); return;
+    }
+  }
+  requestAnimationFrame(replayTick);
+}
+function stopReplay() { S.replay = null; $("bPause").disabled = true; }
+function togglePause() {
+  const r = S.replay;
+  if (!r) return;
+  if (r.paused) { r.wall0 = performance.now() - (r.frames[r.i].t - r.t0) / Number($("speed").value); }
+  r.paused = !r.paused;
+  if (r.paused) stopRhythm();
+  else if (S.last && ALERT_KEY[S.last.alert]) playKey(ALERT_KEY[S.last.alert]);
+  $("bPause").textContent = r.paused ? "Resume" : "Pause";
+}
+function resetAll() {
+  S.hist = []; S.alerts = []; S.prevT = null; S.prevAlert = 0; S.prevSt = null; S.prevMode = null; S.feel = {};
+  S.trail = []; S.disp = null; S.arrivals = []; S.faultSince = null; S.prevHs = null; S.hasCues = false;
+  S.ab = { s: { ms: 0, n: 0, on: 0 }, n: { ms: 0, n: 0, on: 0 } };
+  stopRhythm();
+}
+
+// ------------------------------------------------------------------ drawing helpers
+function fitCanvas(c) {
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return [g, w, h];
+}
+const CSS = {};
+const css = v => CSS[v] || (CSS[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+const num = (id, d) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
+const rad = d => d * Math.PI / 180;
+function geom() {
+  return { L: num("gL", 0.72), beta: rad(num("gB", 19)), gam: rad(num("gG", 73)), grip: num("gP", 0.43), head: num("gH", 1.8) };
+}
+
+// side view: x ahead of the tip, z up (m)
+function drawScene(f, aDeg) {
+  const [g, W, H] = fitCanvas($("scene"));
+  const X0 = -1.45, X1 = 2.75, Z0 = -0.45, Z1 = 2.05;
+  const k = Math.min(W / (X1 - X0), H / (Z1 - Z0));
+  const ox = (W - (X1 - X0) * k) / 2 - X0 * k, oz = H - ((H - (Z1 - Z0) * k) / 2) + Z0 * k;
+  const P = (x, z) => [ox + x * k, oz - z * k];
+  const line = (a, b, col, w = 2, dash = []) => {
+    g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash); g.beginPath();
+    g.moveTo(...P(a[0], a[1])); g.lineTo(...P(b[0], b[1])); g.stroke(); g.setLineDash([]);
+  };
+  const label = (txt, x, z, col, align = "left") => {
+    g.fillStyle = col; g.font = "13px system-ui, sans-serif"; g.textAlign = align; g.fillText(txt, ...P(x, z));
+  };
+  if (!f || aDeg == null) { label("No cane angle yet", 0.6, 1.0, css("--muted"), "center"); return; }
+
+  const G = geom();
+  const a = rad(aDeg), dep = a - G.beta, el = G.gam - a;
+  const pod = [-G.L * Math.cos(a), G.L * Math.sin(a)];
+  const grip = [-(G.L + G.grip) * Math.cos(a), (G.L + G.grip) * Math.sin(a)];
+  const top = [-CANE_M * Math.cos(a), CANE_M * Math.sin(a)];
+  const drop = isDrop(f.alert), headA = f.alert >= 2 && f.alert <= 4;
+
+  // head-height band the forward beam guards
+  const [bx, by] = P(-0.2, G.head + 0.1), [, by2] = P(0, 0.9);
+  g.fillStyle = "rgba(200,164,159,0.16)"; g.fillRect(bx, by, P(1.9, 0)[0] - bx, by2 - by);
+  label("head-level band 0.9 m – head + 0.1 m", 1.85, 0.95, css("--muted"), "right");
+
+  // pause angle: above this the pod is quiet (edge found)
+  const pa = rad(PAUSE_DEG);
+  line([0, 0], [-CANE_M * Math.cos(pa), CANE_M * Math.sin(pa)], "rgba(125,94,88,0.35)", 1.5, [3, 5]);
+  label(`pause ≥ ${PAUSE_DEG}°`, -CANE_M * Math.cos(pa) - 0.02, CANE_M * Math.sin(pa) + 0.05, css("--muted"), "right");
+
+  // ground: floor, and where the ground beam lands
+  let hit = null, edgeX = null;
+  if (f.dg != null && f.dg > 0 && dep > 0.03) {
+    const d = f.dg / 1000;
+    hit = [pod[0] + d * Math.cos(dep), pod[1] - d * Math.sin(dep)];
+    const dh = f.dh != null ? f.dh / 1000 : hit[1];
+    if (dh < -DROP_M) edgeX = pod[0] + pod[1] / Math.tan(dep);        // the beam leaves the floor here at the latest
+    hit[1] = Math.min(dh, 0.15);
+  }
+  const floorEnd = edgeX != null ? edgeX : X1;
+  line([X0, 0], [floorEnd, 0], css("--floor"), 3);
+  if (edgeX != null) {
+    line([edgeX, 0], [edgeX, hit[1]], css("--drop"), 3);
+    line([edgeX, hit[1]], [X1, hit[1]], css("--floor"), 3);
+    label(`drop ${Math.abs(hit[1] * 100).toFixed(0)} cm`, edgeX + 0.05, hit[1] - 0.12, css("--drop"));
+  }
+
+  // user and cane
+  const bodyX = grip[0] - HAND_AHEAD_M, ink = css("--figure"), cane = css("--ink");
+  line([bodyX, 0], [bodyX, G.head - 0.22], ink, 3);
+  g.strokeStyle = ink; g.lineWidth = 3; g.beginPath(); g.arc(...P(bodyX, G.head - 0.11), 0.11 * k, 0, 2 * Math.PI); g.stroke();
+  line([bodyX, G.head - 0.42], grip, ink, 3);
+  line(top, [0, 0], cane, 4);
+  const [lv, rv] = motorLevels(), buzz = Math.max(lv, rv);
+  g.fillStyle = css("--burg");
+  const ps = 14 + 6 * buzz;
+  g.fillRect(P(...pod)[0] - ps / 2, P(...pod)[1] - ps / 2, ps, ps);
+  if (buzz) {                                                         // the pod is vibrating
+    g.strokeStyle = "rgba(77,14,19,0.45)"; g.lineWidth = 2;
+    for (const rr of [16, 24]) { g.beginPath(); g.arc(...P(...pod), rr, 0, 2 * Math.PI); g.stroke(); }
+  }
+  label("pod", pod[0] - 0.09, pod[1] - 0.05, css("--muted"), "right");
+
+  // ground beam
+  if (hit) {
+    line(pod, hit, drop ? css("--drop") : css("--ground"), 2.5);
+    g.fillStyle = drop ? css("--drop") : css("--ground");
+    g.beginPath(); g.arc(...P(...hit), 5, 0, 2 * Math.PI); g.fill();
+    label(`${(hit[0]).toFixed(2)} m past the tip`, hit[0], hit[1] + 0.09, css("--muted"), "center");
+  } else if (dep > 0.03) {
+    const far = [pod[0] + 2.4 * Math.cos(dep), pod[1] - 2.4 * Math.sin(dep)];
+    line(pod, far, css("--ground"), 2, [6, 6]);
+    label("ground beam: no return", far[0], far[1] + 0.1, css("--muted"), "right");
+  }
+
+  // forward (head-level) beam
+  if (f.df != null && f.df > 0) {
+    const d = f.df / 1000, end = [pod[0] + d * Math.cos(el), pod[1] + d * Math.sin(el)];
+    line(pod, end, headA ? css("--burg") : css("--fwd"), 2.5);
+    g.fillStyle = headA ? css("--burg") : css("--fwd");
+    g.fillRect(P(...end)[0] - 4, P(...end)[1] - 14, 8, 28);
+    if (f.hf != null) {
+      const right = end[0] > X1 - 1.0;
+      label(`obstacle at ${(f.hf / 1000).toFixed(2)} m`, end[0] + (right ? -0.06 : 0.06), end[1] + (right ? 0.12 : 0),
+            css("--head"), right ? "right" : "left");
+    }
+  } else {
+    const r = Math.min(2.4, (Z1 - 0.1 - pod[1]) / Math.max(Math.sin(el), 0.2));
+    line(pod, [pod[0] + r * Math.cos(el), pod[1] + r * Math.sin(el)], css("--pink"), 2, [6, 6]);
+  }
+  label(`α ${aDeg.toFixed(1)}°`, grip[0] + 0.05, grip[1] + 0.12, css("--text"));
+  if (f.st === 2) label("paused: cane raised, edge found", 0.6, 1.85, css("--burg"), "center");
+}
+
+// top view: x right, y ahead (m); body at the origin, hand 0.25 m ahead
+function topPose(aDeg, yoDeg, f, G) {
+  const a = rad(aDeg), th = rad(yoDeg || 0), hand = [0, HAND_AHEAD_M];
+  const dir = [Math.sin(th), Math.cos(th)];
+  const at = r => [hand[0] + dir[0] * r, hand[1] + dir[1] * r];
+  const lc = (G.L + G.grip) * Math.cos(a), podR = G.grip * Math.cos(a);
+  let spotR = null;
+  const dep = a - G.beta;
+  if (f && f.dg != null && f.dg > 0 && dep > 0.03) spotR = podR + (f.dg / 1000) * Math.cos(dep);
+  else if (dep > 0.03) spotR = podR + G.L * Math.sin(a) / Math.tan(dep);
+  let fwdR = null;
+  if (f && f.df != null && f.df > 0) fwdR = podR + (f.df / 1000) * Math.cos(G.gam - a);
+  return { hand, tip: at(lc), pod: at(podR), spot: spotR != null ? at(spotR) : null, fwd: fwdR != null ? at(fwdR) : null,
+           fwdR, dir };
+}
+function drawTop(f, aDeg, yoDeg) {
+  const [g, W, H] = fitCanvas($("top"));
+  const X0 = -1.9, X1 = 1.9, Y0 = -0.35, Y1 = 2.75;
+  const k = Math.min(W / (X1 - X0), H / (Y1 - Y0));
+  const ox = W / 2, oy = H - ((H - (Y1 - Y0) * k) / 2) + Y0 * k;
+  const P = (x, y) => [ox + x * k, oy - y * k];
+  const label = (txt, x, y, col, align = "left", size = 12) => {
+    g.fillStyle = col; g.font = `${size}px system-ui, sans-serif`; g.textAlign = align; g.fillText(txt, ...P(x, y));
+  };
+  if (!f || aDeg == null) { label("No sweep data yet", 0, 1.2, css("--muted"), "center", 13); return; }
+  const G = geom(), hand = [0, HAND_AHEAD_M];
+
+  // drop corridor wedge (sweep centre +- 35 deg) and head-level corridor strip
+  g.fillStyle = "rgba(216,196,172,0.28)";
+  g.beginPath(); g.moveTo(...P(...hand));
+  g.arc(...P(...hand), 2.6 * k, -Math.PI / 2 - rad(GROUND_CORRIDOR_DEG), -Math.PI / 2 + rad(GROUND_CORRIDOR_DEG));
+  g.closePath(); g.fill();
+  g.fillStyle = "rgba(200,164,159,0.20)";
+  g.fillRect(P(-FORWARD_CORRIDOR_M, 0)[0], P(0, Y1)[1], 2 * FORWARD_CORRIDOR_M * k, (Y1 - 0.3) * k);
+  g.strokeStyle = "rgba(125,94,88,0.35)"; g.setLineDash([4, 6]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(...P(0, HAND_AHEAD_M)); g.lineTo(...P(0, Y1)); g.stroke(); g.setLineDash([]);
+  label(`drop corridor ±${GROUND_CORRIDOR_DEG}°`, 2.6 * Math.sin(rad(GROUND_CORRIDOR_DEG)) + 0.05,
+        HAND_AHEAD_M + 2.6 * Math.cos(rad(GROUND_CORRIDOR_DEG)), css("--muted"), "left", 11);
+  label("head-level corridor", FORWARD_CORRIDOR_M + 0.04, Y1 - 0.15, css("--muted"), "left", 11);
+
+  // drop edge across the path where the beam found it
+  const pose = topPose(aDeg, yoDeg, f, G);
+  if (isDrop(f.alert) && pose.spot) {
+    g.strokeStyle = css("--drop"); g.lineWidth = 4;
+    g.beginPath(); g.moveTo(...P(X0 + 0.2, pose.spot[1])); g.lineTo(...P(X1 - 0.2, pose.spot[1])); g.stroke();
+    label("drop-off", X1 - 0.22, pose.spot[1] + 0.07, css("--drop"), "right", 13);
+  }
+
+  // trail of the last 3 s: tip and ground spot
+  const now = S.last.t;
+  S.trail.forEach(p => {
+    const age = (now - p.t) / TRAIL_MS;
+    if (age > 1 || age < 0) return;
+    const al = (1 - age) * 0.7;
+    g.fillStyle = `rgba(58,11,15,${al * 0.6})`;
+    g.beginPath(); g.arc(...P(...p.tip), 2.2, 0, 2 * Math.PI); g.fill();
+    if (p.spot) {
+      g.fillStyle = p.drop ? `rgba(77,14,19,${al})` : `rgba(142,59,63,${al * 0.75})`;
+      g.beginPath(); g.arc(...P(...p.spot), p.drop ? 4 : 2.8, 0, 2 * Math.PI); g.fill();
+    }
+  });
+
+  // user (shoulders + head) seen from above
+  g.fillStyle = css("--figure");
+  g.beginPath(); g.ellipse(...P(0, 0), 0.24 * k, 0.11 * k, 0, 0, 2 * Math.PI); g.fill();
+  g.fillStyle = css("--stage"); g.strokeStyle = css("--figure"); g.lineWidth = 2;
+  g.beginPath(); g.arc(...P(0, 0.01), 0.09 * k, 0, 2 * Math.PI); g.fill(); g.stroke();
+
+  // ground beam (from the pod to its spot) and forward beam
+  if (pose.spot) {
+    g.strokeStyle = isDrop(f.alert) ? css("--drop") : css("--ground"); g.lineWidth = 2; g.setLineDash([5, 4]);
+    g.beginPath(); g.moveTo(...P(...pose.pod)); g.lineTo(...P(...pose.spot)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = isDrop(f.alert) ? css("--drop") : css("--ground");
+    g.beginPath(); g.arc(...P(...pose.spot), 6, 0, 2 * Math.PI); g.fill();
+  }
+  if (pose.fwd && f.hf != null) {
+    const headA = f.alert >= 2 && f.alert <= 4;
+    g.fillStyle = headA ? css("--burg") : css("--fwd");
+    const side = f.alert === 2 ? -1 : f.alert === 3 ? 1 : 0;
+    const ob = [pose.fwd[0] + side * 0.12, pose.fwd[1]];
+    g.fillRect(P(...ob)[0] - 9, P(...ob)[1] - 4, 18, 8);
+    label(`head-level ${(f.hf / 1000).toFixed(2)} m`, ob[0] + 0.14, ob[1] - 0.02, css("--head"), "left", 11);
+  }
+
+  // cane: hand -> tip, pod on it
+  g.strokeStyle = css("--ink"); g.lineWidth = 4; g.lineCap = "round";
+  g.beginPath(); g.moveTo(...P(...pose.hand)); g.lineTo(...P(...pose.tip)); g.stroke(); g.lineCap = "butt";
+  g.fillStyle = "#C0392B"; g.beginPath(); g.arc(...P(...pose.tip), 4, 0, 2 * Math.PI); g.fill();
+  const [lv, rv] = motorLevels(), buzz = Math.max(lv, rv);
+  g.fillStyle = css("--burg");
+  const ps = 12 + 6 * buzz;
+  g.save(); g.translate(...P(...pose.pod)); g.rotate(rad(yoDeg || 0)); g.fillRect(-ps / 2, -ps / 2, ps, ps);
+  if (lv) { g.fillStyle = css("--pink"); g.fillRect(-ps / 2 - 7, -4, 5, 8); }   // left motor buzzing
+  if (rv) { g.fillStyle = css("--pink"); g.fillRect(ps / 2 + 2, -4, 5, 8); }    // right motor buzzing
+  g.restore();
+  label(`${(yoDeg || 0) >= 0 ? "R" : "L"} ${Math.abs(yoDeg || 0).toFixed(0)}°`, pose.tip[0] + (yoDeg >= 0 ? 0.06 : -0.06),
+        pose.tip[1] + 0.05, css("--text"), yoDeg >= 0 ? "left" : "right", 12);
+}
+
+function drawChart() {
+  const [g, W, H] = fitCanvas($("chart"));
+  const h = S.hist;
+  if (!h.length) return;
+  const tEnd = h[h.length - 1].t, tStart = tEnd - WINDOW_MS;
+  const padL = 44, padR = 8, gap = 14, inner = H - 2 * gap - 22;
+  const h1 = inner * 0.44, h2 = inner * 0.28, h3 = inner * 0.28;
+  const X = t => padL + (t - tStart) / WINDOW_MS * (W - padL - padR);
+  const panes = [
+    { top: 4, hgt: h1, lo: -40, hi: 15, key: "dh", scale: 0.1, unit: "Δh cm", refs: [-DROP_M * 100], refCol: css("--drop"), col: css("--ground"), dots: true },
+    { top: 4 + h1 + gap, hgt: h2, lo: 0, hi: 90, key: "a", scale: 1, unit: "α °", refs: [PAUSE_DEG], refCol: css("--muted"), col: css("--ink") },
+    { top: 4 + h1 + h2 + 2 * gap, hgt: h3, lo: -50, hi: 50, key: "yo", scale: 1, unit: "sweep °", refs: [-GROUND_CORRIDOR_DEG, 0, GROUND_CORRIDOR_DEG], refCol: css("--line"), col: css("--head") },
+  ];
+  g.font = "11px system-ui, sans-serif";
+  for (const p of panes) {
+    const Y = v => p.top + (p.hi - v) / (p.hi - p.lo) * p.hgt;
+    for (let i = 1; i < h.length; i++) {
+      const a = h[i].alert;
+      if (!a) continue;
+      g.fillStyle = isDrop(a) ? "rgba(77,14,19,0.16)" : "rgba(200,164,159,0.35)";
+      g.fillRect(X(h[i - 1].t), p.top, Math.max(1, X(h[i].t) - X(h[i - 1].t)), p.hgt);
+    }
+    g.strokeStyle = css("--line"); g.lineWidth = 1; g.strokeRect(padL, p.top, W - padL - padR, p.hgt);
+    g.strokeStyle = p.refCol; g.setLineDash([4, 4]);
+    for (const r of p.refs) { g.beginPath(); g.moveTo(padL, Y(r)); g.lineTo(W - padR, Y(r)); g.stroke(); }
+    g.setLineDash([]);
+    g.fillStyle = css("--muted"); g.textAlign = "right";
+    g.fillText(p.hi, padL - 4, p.top + 10); g.fillText(p.lo, padL - 4, p.top + p.hgt);
+    g.save(); g.translate(10, p.top + p.hgt / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillText(p.unit, 0, 0); g.restore();
+    g.strokeStyle = p.col; g.fillStyle = p.col; g.lineWidth = 1.5;
+    if (p.dots) {
+      for (const s of h) if (s[p.key] != null) {
+        const v = Math.max(p.lo, Math.min(p.hi, s[p.key] * p.scale));
+        g.fillRect(X(s.t) - 1.5, Y(v) - 1.5, 3, 3);
+      }
+    } else {
+      g.beginPath();
+      let first = true;
+      for (const s of h) if (s[p.key] != null) {
+        const xy = [X(s.t), Y(Math.max(p.lo, Math.min(p.hi, s[p.key] * p.scale)))];
+        first ? g.moveTo(...xy) : g.lineTo(...xy); first = false;
+      }
+      g.stroke();
+    }
+  }
+  g.fillStyle = css("--muted"); g.textAlign = "left";
+  g.fillText("–15 s", padL, H - 4); g.textAlign = "right"; g.fillText("now", W - padR, H - 4);
+}
+
+// sweep width / rate from the last 4 s of yaw offset
+function sweepStats() {
+  const h = S.hist;
+  if (h.length < 5) return null;
+  const tEnd = h[h.length - 1].t, win = h.filter(s => s.t >= tEnd - 4000 && s.yo != null);
+  if (win.length < 5) return null;
+  let lo = Infinity, hi = -Infinity, turns = 0, dir = 0, ext = win[0].yo;
+  for (const s of win) {
+    lo = Math.min(lo, s.yo); hi = Math.max(hi, s.yo);
+    if (dir >= 0 && s.yo < ext - 6) { if (dir > 0) turns++; dir = -1; ext = s.yo; }
+    else if (dir <= 0 && s.yo > ext + 6) { if (dir < 0) turns++; dir = 1; ext = s.yo; }
+    else ext = dir > 0 ? Math.max(ext, s.yo) : dir < 0 ? Math.min(ext, s.yo) : ext;
+  }
+  const span = (win[win.length - 1].t - win[0].t) / 1000;
+  return { half: (hi - lo) / 2, hz: span > 1 ? turns / 2 / span : 0 };
+}
+
+function fmtMs(ms) { const s = Math.round(ms / 1000); return s < 90 ? s + " s" : Math.floor(s / 60) + " min " + (s % 60) + " s"; }
+
+// DOM: once per new frame
+function renderDom() {
+  const f = S.last;
+  let [txt, cls] = ALERT[f.alert || 0] || ["Alert " + f.alert, "drop"];
+  if (!f.alert) {                                     // no hazard: say what the pod is doing instead
+    const QUIET = { 2: ["Edge found · pod quiet", "paused"], 4: ["Calibrating · hold the cane still", "paused"],
+                    5: ["SENSOR FAULT · pod blind", "head"], 6: ["Low battery", "head"], 8: ["Pod off", "paused"],
+                    9: ["Standby · click the button or tap the tip 5 times", "paused"] };
+    if (QUIET[f.st]) [txt, cls] = QUIET[f.st];
+  }
+  $("banner").className = cls;
+  $("bannerText").textContent = txt;
+  $("bannerSub").textContent = (STATE[f.st] || "") +
+    (f.st === 2 ? ` (cane above ${PAUSE_DEG}°)` : "") + " · t = " + (f.t / 1000).toFixed(1) + " s";
+  const naive = f.m === "n";
+  $("modeChip").className = "chip " + (naive ? "naive" : "smart");
+  $("modeChip").textContent = naive ? "NAIVE" : "SMART";
+
+  $("progress").style.width = S.replay ? (100 * S.replay.i / S.replay.frames.length).toFixed(1) + "%" : "100%";
+  $("pT").innerHTML = `<b>${(f.t / 1000).toFixed(1)} s</b>`;
+  $("pSt").textContent = STATE[f.st] || "";
+  $("pMode").textContent = naive ? "NAIVE" : "SMART";
+
+  for (const k of FEEL) {
+    const active = k.codes ? k.codes.includes(f.alert || 0) : f.st === k.st;
+    $("feel-" + k.id).classList.toggle("active", active);
+    const c = S.feel[k.id];
+    $("feelN-" + k.id).textContent = (c ? c.n : 0) + "×";
+    $("feelL-" + k.id).textContent = c ? "last " + (c.last / 1000).toFixed(1) + " s" : "–";
+    if (k.sides) document.querySelectorAll(`#feel-${k.id} .sides i`).forEach(el =>
+      el.classList.toggle("lit", active && Number(el.dataset.side) === f.alert));
+  }
+
+  $("vA").textContent = f.a != null ? f.a.toFixed(1) + "°" : "–";
+  $("vDh").textContent = f.dh != null ? (f.dh / 10).toFixed(1) + " cm" : "–";
+  $("vDh").style.color = f.dh != null && f.dh < -DROP_M * 1000 ? css("--drop") : "";
+  $("vTech").textContent = TECH[f.tech] || "–";
+  $("vV").textContent = f.v != null ? f.v.toFixed(2) + " m/s" : "–";
+  $("vSt").textContent = STATE[f.st] || "–";
+  $("vB").textContent = f.batt != null ? f.batt + "%" : "–";
+  $("vGq").textContent = f.gq != null ? f.gq + "%" + (f.gq < 70 ? " (dark/shiny floor?)" : "") : "–";
+  $("vHf").textContent = f.hf != null ? (f.hf / 1000).toFixed(2) + " m" : "–";
+  // raw laser distances (bring-up): ToF runs at ~30 Hz, telemetry at 50 Hz, so hold the last reading 0.5 s
+  for (const [key, id] of [["dg", "vDg"], ["df", "vDf"]]) {
+    if (f[key] != null && f[key] > 0) S["raw_" + key] = { v: f[key], t: f.t };
+    const r = S["raw_" + key];
+    $(id).textContent = r && f.t - r.t <= 500 && f.t >= r.t ? r.v + " mm" : "–";
+  }
+
+  const sw = sweepStats();
+  $("sW").textContent = sw ? "±" + sw.half.toFixed(0) + "°" : "–";
+  $("sR").textContent = sw && sw.hz > 0.05 ? sw.hz.toFixed(2) + " Hz" : "–";
+  $("sY").textContent = f.yo != null ? (f.yo >= 0 ? "right " : "left ") + Math.abs(f.yo).toFixed(0) + "°" : "–";
+  $("sT").textContent = TECH[f.tech] || "–";
+
+  for (const [m, t, n, r, b] of [["n", "abNt", "abNa", "abNr", "abNb"], ["s", "abSt", "abSa", "abSr", "abSb"]]) {
+    const ab = S.ab[m];
+    $(t).textContent = fmtMs(ab.ms);
+    $(n).textContent = ab.n;
+    $(r).textContent = ab.ms > 5000 ? (ab.n / (ab.ms / 60000)).toFixed(1) : "–";
+    $(b).textContent = ab.ms > 5000 ? Math.round(100 * ab.on / ab.ms) + "%" : "–";
+  }
+  if (S.ab.n.ms > 5000 && S.ab.s.ms > 5000) {
+    const bn = S.ab.n.on / S.ab.n.ms, bs = S.ab.s.on / S.ab.s.ms;
+    $("ratio").innerHTML = `Naive buzzed <b style="color:var(--head)">${Math.round(100 * bn)}%</b> of the time, ` +
+      `smart <b>${Math.round(100 * bs)}%</b>` + (bs > 0 ? ` (${(bn / bs).toFixed(0)}× less)` : "") + ".";
+  }
+  $("alerts").innerHTML = S.alerts.length ? S.alerts.slice(0, 12).map(x =>
+    `<div><span style="color:${isDrop(x.a) ? css("--drop") : css("--head")}">${ALERT[x.a] ? ALERT[x.a][0] : x.a}</span>
+     · ${(x.t / 1000).toFixed(1)} s · ${x.mode === "n" ? "naive" : "smart"}</div>`).join("") :
+    `<div style="color:var(--muted)">None yet</div>`;
+  drawChart();
+}
+
+// animation: every display frame. Angle and sweep glide toward the newest frame (smooths 10 Hz Bluetooth).
+let lastAnim = performance.now();
+function animate(now) {
+  const dt = Math.min(0.1, (now - lastAnim) / 1000);
+  lastAnim = now;
+  const f = S.last;
+  if (f) {
+    if (S.dirty) { S.dirty = false; renderDom(); }
+    if (S.disp && f.a != null) {
+      const hz = S.arrivals.length / 2, tau = hz > 25 ? 0.03 : 0.07;
+      const kf = 1 - Math.exp(-dt / tau);
+      S.disp.a += (f.a - S.disp.a) * kf;
+      S.disp.yo += ((f.yo || 0) - S.disp.yo) * kf;
+      // trail sample
+      const G = geom(), pose = topPose(S.disp.a, S.disp.yo, f, G);
+      const tr = S.trail;
+      if (!tr.length || f.t !== tr[tr.length - 1].t || now - (tr[tr.length - 1].w || 0) > 30)
+        tr.push({ t: f.t, w: now, tip: pose.tip, spot: pose.spot, drop: isDrop(f.alert) });
+      while (tr.length && tr[0].t < f.t - TRAIL_MS) tr.shift();
+      if (tr.length > 400) tr.splice(0, tr.length - 400);
+    }
+    const a = S.disp ? S.disp.a : f.a, yo = S.disp ? S.disp.yo : f.yo;
+    drawScene(f, a);
+    drawTop(f, a, yo);
+    $("pA").textContent = a != null ? `α ${a.toFixed(1)}°` : "α –";
+
+    // live / stale / rate
+    const age = now - S.lastArrival, hz = S.arrivals.filter(x => x > now - 2000).length / 2;
+    const stale = S.live && age > 700;
+    $("liveTag").textContent = S.replay ? "REPLAY" : stale ? "NO DATA" :
+      S.live ? "LIVE" : "PAUSED";
+    $("liveTag").className = "live" + (S.live && !stale ? " on" : "");
+    $("pHz").textContent = S.replay || !S.live ? "" : stale ? `last frame ${(age / 1000).toFixed(1)} s ago` : `${hz.toFixed(0)} Hz`;
+
+    // motors follow the same timeline as the sound
+    const [lv, rv] = motorLevels(), onDark = isDrop(f.alert);
+    for (const [id, v] of [["mL", lv], ["mR", rv]]) {
+      $(id).style.background = v ? (onDark ? `rgba(238,228,218,${0.3 + 0.7 * v})` : `rgba(77,14,19,${0.25 + 0.75 * v})`) : "transparent";
+      $(id).classList.toggle("buzz", v > 0);
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// ------------------------------------------------------------------ wiring
+$("bSerial").onclick = connectSerial;
+$("bBle").onclick = connectBle;
+if (!("serial" in navigator)) { $("bSerial").disabled = true; $("bSerial").title = "Web Serial needs Chrome or Edge"; }
+if (!("bluetooth" in navigator)) { $("bBle").disabled = true; $("bBle").title = "Web Bluetooth needs Chrome or Edge"; }
+$("bFile").onclick = () => { audioInit(); $("file").click(); };
+$("file").onchange = async e => { const fl = e.target.files[0]; if (fl) startReplay(await fl.text(), fl.name); e.target.value = ""; };
+$("bPause").onclick = togglePause;
+$("bAbReset").onclick = () => { S.ab = { s: { ms: 0, n: 0, on: 0 }, n: { ms: 0, n: 0, on: 0 } }; S.alerts = []; S.feel = {}; S.dirty = true; };
+$("bSound").onclick = () => setSound(!AUD.on);
+$("vol").oninput = e => { AUD.vol = Number(e.target.value); if (AUD.master && AUD.on) AUD.master.gain.setTargetAtTime(AUD.vol, AUD.ctx.currentTime, 0.02); };
+$("plan").onchange = e => setPlan(e.target.value);
+document.addEventListener("keydown", e => {
+  if ((e.key === "m" || e.key === "M") && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) setSound(!AUD.on);
+});
+document.addEventListener("pointerdown", () => { if (AUD.on) audioInit(); }, { once: true });
+// the start view, restored when the pod is switched off (dashOff)
+document.querySelectorAll("main [id]").forEach(e => {
+  if (!/CANVAS|INPUT|SELECT|TEXTAREA|BUTTON/.test(e.tagName) && !e.querySelector("[id]")) INIT_HTML[e.id] = e.innerHTML;
+});
+buildFeel();
+$("bSave").onclick = () => {
+  const blob = new Blob([S.rec.join("\n") + "\n"], { type: "application/x-ndjson" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "saferoute_" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".jsonl";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => sendCmd(b.dataset.cmd));
+$("bSend").onclick = () => { sendCmd($("cmd").value); $("cmd").value = ""; };
+$("cmd").addEventListener("keydown", e => { if (e.key === "Enter") $("bSend").click(); });
+function sendCmd(s) {
+  s = s.trim();
+  if (!s) return;
+  const c = s.toLowerCase();
+  if (c === "plan a" || c === "plan b") setPlan(c.slice(-1).toUpperCase());
+  // the pod echoes the test buzz back as a cue (hs); play it here only without a live pod
+  if (/^test [lrb]$/.test(c)) { audioInit(); if (!(S.send && S.hasCues)) playKey({ l: "testL", r: "testR", b: "testB" }[c.slice(-1)]); }
+  if (!S.send) return;
+  logConsole("> " + s);
+  Promise.resolve(S.send(s)).catch(e => logConsole("send failed: " + e.message));
+}
+["gL", "gB", "gG", "gP", "gH"].forEach(id => $(id).addEventListener("input", () => { S.dirty = true; }));
+window.addEventListener("resize", () => { S.dirty = true; });
+setConn($("conn").textContent, false);
+requestAnimationFrame(animate);
+
+const q = new URLSearchParams(location.search).get("replay");
+if (q) fetch(q).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+  .then(t => startReplay(t, q.split("/").pop())).catch(e => setConn("Replay: cannot load " + q + " (" + e.message + ")", false));
+</script>
+</body>
+</html>
