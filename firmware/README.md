@@ -9,7 +9,7 @@ This is the ESP32 firmware for the cane pod. It runs on an **ESP32 DevKit V1** (
 - 1x push button and 1x status LED.
 - A USB power bank.
 
-Wiring: [`../hardware/schematic_as_built.svg`](../hardware/schematic_as_built.svg).
+Schematic: [`../hardware/`](../hardware).
 
 **Fixed-angle mode:** the user holds the cane at one trained angle (**38 deg**) and sweeps a trained width (**+-23 deg**). The accelerometer's sideways acceleration then tells where the cane is in its sweep (left or right of the walking line). That makes the walking corridor and the left / right head-level alerts work without a gyro. Both numbers come from the real walking recordings in [`../experiment_data`](../experiment_data). The [DATA REPORT](../docs/SafeRoute_DATA_REPORT.pdf) explains how.
 

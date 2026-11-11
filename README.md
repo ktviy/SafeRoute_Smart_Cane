@@ -14,7 +14,7 @@
 
 [**Live Dashboard**](https://ktviy.github.io/SafeRoute_Smart_Cane/dashboard/) ·
 [**Data Report (PDF)**](docs/SafeRoute_DATA_REPORT.pdf) ·
-[**Schematic**](hardware/schematic_as_built.svg) ·
+[**Schematic**](hardware/schematic.svg) ·
 [**Firmware Guide**](firmware/README.md) ·
 [**Experiment Results**](experiment_data/results/report.md)
 
@@ -58,8 +58,8 @@ A white cane is excellent at reading what is directly under its tip, but it miss
 - **Every number from real data.** All thresholds and mounting angles come from 18 recordings of a real cane user. Nothing in this repository is simulated.
 
 <p align="center">
-  <img src="hardware/schematic_as_built.png" alt="SafeRoute as-built schematic" width="720">
-  <br><em>As-built schematic of the pod.</em>
+  <img src="hardware/schematic.png" alt="SafeRoute schematic" width="720">
+  <br><em>Schematic of the pod (KiCad).</em>
 </p>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -87,7 +87,7 @@ Measured on real cane recordings (walker P1, 30 Oct – 3 Nov 2026). Full method
 flowchart LR
     A["Ground ToF<br/>(19° above shaft)"] --> D["Drop height dh"]
     B["Forward ToF<br/>(73° above shaft)"] --> E["Obstacle height H"]
-    C["Accelerometer"] --> F["Cane angle +<br/>sweep position"]
+    C["MPU-6050 IMU"] --> F["Cane angle +<br/>sweep position"]
     F --> D
     F --> E
     D --> G{"3-rule filter<br/>confirm · band · corridor"}
@@ -98,7 +98,7 @@ flowchart LR
 ```
 
 1. **Sensing.** The **ground beam** hits the floor about 0.76 m past the tip. Combined with the cane angle, it gives the floor height ahead (`dh`); a drop deeper than **8 cm** is a drop-off. The **forward beam** measures how high an obstacle in front is.
-2. **Sweep tracking.** The accelerometer gives the cane angle and the position within the sweep. The user holds a trained **38°** angle and sweeps **±23°**, both taken from the recordings.
+2. **Sweep tracking.** The MPU-6050 IMU gives the cane angle and the position within the sweep. The user holds a trained **38°** angle and sweeps **±23°**, both taken from the recordings.
 3. **Filtering.** An alert must pass three rules:
    - **Confirmation:** seen in 3 consecutive frames (2 for head level).
    - **Height band:** the measured height falls in the hazard's band.
@@ -117,13 +117,13 @@ The decision logic is plain, hardware-free C++ in [`firmware/lib/saferoute`](fir
 
 | Part | Qty | Role |
 | --- | :---: | --- |
-| ESP32 DevKit V1 (ESP32-WROOM-32, CP2102) | 1 | Controller: 50 Hz loop, USB and BLE telemetry |
-| VL53L5CX 8×8 multizone ToF sensor | 2 | Ground beam (drop-offs) and forward beam (head level) |
-| Grove 3-axis digital accelerometer (LIS3DHTR) | 1 | Cane angle, sweep position, tip taps (no gyro) |
-| ELEGOO DC motor with off-centre weight | 2 | Left / right vibration |
-| PN2222 + 470 Ω + 1N5817 | 2 sets | Motor drivers with flyback diodes |
-| 100 µF capacitor | 1 | Motor supply buffer |
-| Push button, LED + resistor | 1 each | On/off and status |
+| ESP32-DevKitC (ESP32-WROOM-32) | 1 | Controller: sensor loop, haptics, USB and BLE telemetry |
+| VL53L1X time-of-flight sensor | 2 | Ground beam (drop-offs) and forward beam (head level) |
+| MPU-6050 6-axis IMU (accelerometer + gyro) | 1 | Cane angle, sweep position, tip taps |
+| DRV2605L haptic motor driver | 2 | Left / right haptic waveforms |
+| Vibrating mini motor disc (Adafruit 1201, ERM) | 2 | Left / right vibration |
+| RGB LED (common cathode) | 1 | Status |
+| Push button | 1 | On / off |
 | USB power bank | 1 | 5 V supply |
 | 3D-printed pod and 130 cm cane | — | Pod mounted 0.72 m from the tip |
 
@@ -131,13 +131,13 @@ The decision logic is plain, hardware-free C++ in [`firmware/lib/saferoute`](fir
 
 | Signal | ESP32 pin |
 | --- | --- |
-| I2C SDA / SCL | GPIO21 / GPIO22 |
-| ToF LPn (ground / forward) | GPIO17 / GPIO16 |
-| Motor left / right | GPIO18 / GPIO19 |
+| I2C0 SDA / SCL (ToF sensors, IMU, left haptic driver) | GPIO21 / GPIO22 |
+| I2C1 SDA / SCL (right haptic driver) | GPIO25 / GPIO26 |
+| ToF XSHUT (ground / forward) | GPIO17 / GPIO16 |
 | Button | GPIO27 |
-| Status LED | GPIO2 |
+| RGB LED (R / G / B) | GPIO2 / GPIO4 / GPIO15 |
 
-Full wiring, mounting angles and a bring-up checklist are in the [firmware guide](firmware/README.md#wiring-esp32-devkit-v1). Schematic notes are in [`hardware/`](hardware).
+Full BOM with references, design notes and the KiCad project are in [`hardware/`](hardware).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -225,7 +225,7 @@ SafeRoute_Smart_Cane/
 │   ├── lib/saferoute/       hardware-free pod logic (kinematics, filter, haptics, ...)
 │   ├── src/                 ESP32 main loop, HAL drivers, BLE telemetry
 │   └── test/                45 native unit tests
-├── hardware/            as-built schematic (SVG/PNG) + original KiCad design
+├── hardware/            KiCad schematic project + SVG/PNG export
 ├── experiment_data/     raw cane recordings, analysis scripts, results and plots
 ├── dashboard/           web dashboard (Web Serial / Web Bluetooth) + Python version
 └── docs/                DATA REPORT: every design number and its source
@@ -236,12 +236,11 @@ SafeRoute_Smart_Cane/
 ## Roadmap
 
 - [x] Clip-on pod with dual ToF beams and dual haptic motors
-- [x] Accelerometer-only cane angle and sweep tracking
+- [x] IMU-based cane angle and sweep tracking
 - [x] Three-rule alert filter with edge-found pause
 - [x] Live web dashboard over USB and Bluetooth
 - [x] Design numbers derived from 18 real cane recordings
 - [ ] Verify the cane angle statically on the 130 cm build cane
-- [ ] Add a gyro for full corridor tracking with two-point touch
 - [ ] Test with more walkers and orientation & mobility instructors
 - [ ] Custom PCB and smaller enclosure
 

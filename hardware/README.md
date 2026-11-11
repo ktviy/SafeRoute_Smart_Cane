@@ -1,24 +1,60 @@
 # Hardware
 
-## As built
+The SafeRoute pod schematic, drawn in KiCad. `schematic.svg` / `schematic.png` are rendered from [`kicad/smart_cane.kicad_sch`](kicad/smart_cane.kicad_sch) by [`render_schematic.py`](render_schematic.py), which draws every symbol, wire and label at its KiCad position in KiCad's default colours.
 
-`schematic_as_built.svg` / `.png` show the circuit on the pod. The pin numbers match `firmware/include/config.h`.
+![SafeRoute schematic](schematic.png)
 
-![Schematic](schematic_as_built.png)
+## Bill of Materials
 
-The schematic has four parts:
+| Ref | Part | Qty | Role |
+| --- | --- | :---: | --- |
+| U1 | ESP32-DevKitC (ESP32-WROOM-32) | 1 | Controller: sensor loop, haptics, USB and BLE telemetry |
+| ToF_GND, ToF_FWD | VL53L1X time-of-flight sensor | 2 | Ground beam (drop-offs) and forward beam (head-level obstacles) |
+| MPU | MPU-6050 6-axis IMU (accelerometer + gyro) | 1 | Cane angle, sweep position, tip taps |
+| UDRV_L, DRV_R | DRV2605L haptic motor driver | 2 | Left / right haptic waveforms |
+| M1, M2 | Vibrating mini motor disc (Adafruit 1201, ERM) | 2 | Left / right vibration |
+| D1 | RGB LED, common cathode | 1 | Status |
+| BTN1 | Push button | 1 | On / off |
+| — | USB power bank | 1 | 5 V supply |
 
-- **Sensors.** Two VL53L5CX sensors and the Grove accelerometer share one I2C bus (GPIO21 SDA, GPIO22 SCL) and the 3V3 supply. Each VL53L5CX has its own LPn line (GPIO17 for ground, GPIO16 for forward). At boot the firmware moves the ground sensor to I2C address 0x30.
-- **Motors.** Each motor is wired as: GPIO18/19 -> 470 ohm -> PN2222 base. The emitter goes to GND and the collector to the motor's black lead. The motor's red lead goes to VIN 5 V. A 1N5817 flyback diode sits across each motor, and a 100 uF capacitor across VIN-GND.
-- **Button and LED.** The button goes from GPIO27 to GND (internal pull-up). The LED is driven from GPIO2 through a series resistor.
-- **Power.** A USB power bank plugs into the DevKit's USB port.
+## Pin Map
 
-## Original KiCad design (`kicad_original_plan/`)
+| Net | ESP32 pin | Connects to |
+| --- | --- | --- |
+| `I2C0_SDA` / `I2C0_SCL` | GPIO21 / GPIO22 | Both VL53L1X, MPU-6050, left DRV2605L |
+| `I2C1_SDA` / `I2C1_SCL` | GPIO25 / GPIO26 | Right DRV2605L |
+| `TOF_GND_XSHUT` | GPIO17 | Ground VL53L1X XSHUT |
+| `TOF_FWD_XSHUT` | GPIO16 | Forward VL53L1X XSHUT |
+| `BTN_IN` | GPIO27 | Push button (other side to GND, internal pull-up) |
+| `R_LED_R` / `R_LED_G` / `R_LED_B` | GPIO2 / GPIO4 / GPIO15 | RGB LED anodes (cathode to GND) |
+| `3.3V` | 3V3 | Sensor, IMU and driver supply |
+| `+5V` | 5V | USB power bank input |
 
-This is the first schematic, drawn before the build. It uses the parts we planned at the time:
-- 2x DRV2605L haptic drivers with ERM motors;
-- an MPU-6050 IMU (with gyro);
-- 2x VL53L1X single-zone ToF sensors;
-- an RGB LED and a button on an ESP32-DevKitC.
+## Design Notes
 
-The pod was built with the parts the event kit provided instead: VL53L5CX, a Grove accelerometer, and DC motors on PN2222 transistors. So **the KiCad file does not match the built pod.** It is kept as a record of the design. Use the as-built schematic above to wire the pod. Open `smart_cane.kicad_pro` in KiCad 8 or newer; the custom symbols are in `library/`.
+- **Two I2C buses.** The DRV2605L has a fixed I2C address (0x5A), so the two drivers cannot share a bus. The left driver sits on `I2C0` with the sensors; the right driver has its own bus, `I2C1`.
+- **Separate XSHUT lines.** Both VL53L1X sensors power up at address 0x29. Holding one in reset with its XSHUT line lets the other be given a new address at boot, so both can share `I2C0`.
+- **Dedicated haptic drivers.** The DRV2605L drives the ERM motors with overdrive and active braking, so pulses start and stop sharply. That keeps the left / right and short / long rhythms easy to tell apart through the cane shaft.
+- **6-axis IMU.** The MPU-6050 gyro tracks the cane's sweep directly, for an accurate walking-corridor filter with both constant-contact and two-point technique.
+
+## Mounting
+
+| Parameter | Value |
+| --- | --- |
+| Cane length | 130 cm |
+| Pod position | 0.72 m from the tip |
+| Ground ToF angle | 19° above the shaft axis |
+| Forward ToF angle | 73° above the shaft axis |
+
+These values come from the real cane recordings in [`../experiment_data`](../experiment_data); the [DATA REPORT](../docs/SafeRoute_DATA_REPORT.pdf) explains how.
+
+## Opening the Project
+
+Open [`kicad/smart_cane.kicad_pro`](kicad/smart_cane.kicad_pro) in KiCad 10 or newer (the file was saved by KiCad 10.0). Custom symbols (VL53L1X, MPU-6050, DRV2605L, motor disc, button) are in [`kicad/library/`](kicad/library).
+
+To regenerate the images after editing the schematic:
+
+```bash
+cd hardware
+python render_schematic.py kicad/smart_cane.kicad_sch schematic
+```
