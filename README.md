@@ -15,6 +15,7 @@
 [**Live Dashboard**](https://ktviy.github.io/SafeRoute_Smart_Cane/dashboard/) ·
 [**Data Report (PDF)**](docs/SafeRoute_DATA_REPORT.pdf) ·
 [**Schematic**](hardware/schematic.svg) ·
+[**CAD Design**](CAD_Design) ·
 [**Firmware Guide**](firmware/README.md) ·
 [**Experiment Results**](experiment_data/results/report.md)
 
@@ -56,11 +57,6 @@ A white cane is excellent at reading what is directly under its tip, but it miss
 - **Augment, don't replace.** The user keeps their cane and their training; the pod only adds information.
 - **Alert only on hazards.** Constant feedback causes fatigue and gets ignored. The pod stays quiet unless a confirmed hazard is inside the walking corridor.
 - **Every number from real data.** All thresholds and mounting angles come from 18 recordings of a real cane user. Nothing in this repository is simulated.
-
-<p align="center">
-  <img src="hardware/schematic.png" alt="SafeRoute schematic" width="720">
-  <br><em>Schematic of the pod (KiCad).</em>
-</p>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -113,56 +109,33 @@ The decision logic is plain, hardware-free C++ in [`firmware/lib/saferoute`](fir
 
 ## Hardware
 
-### Bill of Materials
-
-| Part | Qty | Role |
-| --- | :---: | --- |
-| ESP32-DevKitC (ESP32-WROOM-32) | 1 | Controller: sensor loop, haptics, USB and BLE telemetry |
-| VL53L1X time-of-flight sensor | 2 | Ground beam (drop-offs) and forward beam (head level) |
-| MPU-6050 6-axis IMU (accelerometer + gyro) | 1 | Cane angle, sweep position, tip taps |
-| DRV2605L haptic motor driver | 2 | Left / right haptic waveforms |
-| Vibrating mini motor disc (Adafruit 1201, ERM) | 2 | Left / right vibration |
-| RGB LED (common cathode) | 1 | Status |
-| Push button | 1 | On / off |
-| USB power bank | 1 | 5 V supply |
-| 3D-printed pod and 130 cm cane | — | Pod mounted 0.72 m from the tip |
-
-### Pin Map
-
-| Signal | ESP32 pin |
+| Component | Role |
 | --- | --- |
-| I2C0 SDA / SCL (ToF sensors, IMU, left haptic driver) | GPIO21 / GPIO22 |
-| I2C1 SDA / SCL (right haptic driver) | GPIO25 / GPIO26 |
-| ToF XSHUT (ground / forward) | GPIO17 / GPIO16 |
-| Button | GPIO27 |
-| RGB LED (R / G / B) | GPIO2 / GPIO4 / GPIO15 |
+| ESP32-DevKitC | Controller, USB and BLE telemetry |
+| 2 × VL53L1X time-of-flight sensors | Ground beam (19°, drop-offs) and forward beam (73°, head level) |
+| MPU-6050 6-axis IMU | Cane angle and sweep position |
+| 2 × DRV2605L + ERM motor discs | Left / right haptic rhythm |
+| RGB LED, push button, USB power bank | Status, on / off, 5 V supply |
 
-Full BOM with references, design notes and the KiCad project are in [`hardware/`](hardware).
+<p align="center">
+  <img src="hardware/schematic.png" alt="SafeRoute schematic" width="720">
+</p>
+
+**→ [`hardware/`](hardware):** full BOM with references, pin map, design notes and the KiCad project.
 
 ### Mechanical Design
 
-The cane and pod mount are modelled in SolidWorks; part files are in [`CAD_Design/`](CAD_Design). The 130 cm cane is a Ø22 mm rod printed in six 216.7 mm segments that join with spigot-and-socket fittings and cross-pins.
+The 130 cm cane is printed in six segments that join with spigot-and-socket fittings, and the pod attaches with a printed clip 0.72 m from the tip.
 
 <p align="center">
-  <img src="CAD_Design/images/HackathonClipping.png" width="220">
+  <img src="CAD_Design/images/HackathonClipping.png" width="200">
   &nbsp;&nbsp;
-  <img src="CAD_Design/images/HackathonStaff4.png" width="140">
+  <img src="CAD_Design/images/HackathonStaff4.png" width="125">
   &nbsp;&nbsp;
-  <img src="CAD_Design/images/UnbalancedMass.png" width="220">
-  <br><em>Pod clip, pod-mount cane segment and motor mass (SolidWorks previews).</em>
+  <img src="CAD_Design/images/UnbalancedMass.png" width="200">
 </p>
 
-| Preview | Part file | Description |
-| :---: | --- | --- |
-| <img src="CAD_Design/images/HackathonStaff1.png" width="60"> | [`HackathonStaff1.SLDPRT`](CAD_Design/HackathonStaff1.SLDPRT) | Segment 1: tip, rounded end |
-| <img src="CAD_Design/images/HackathonStaff2_3.png" width="60"> | [`HackathonStaff2+3.SLDPRT`](CAD_Design/HackathonStaff2+3.SLDPRT) | Segments 2 and 3 (print ×2) |
-| <img src="CAD_Design/images/HackathonStaff4.png" width="60"> | [`HackathonStaff4.SLDPRT`](CAD_Design/HackathonStaff4.SLDPRT) | Segment 4: crossbar at ~0.81 m from the tip for the pod mount |
-| <img src="CAD_Design/images/HackathonStaff5.png" width="60"> | [`HackathonStaff5.SLDPRT`](CAD_Design/HackathonStaff5.SLDPRT) | Segment 5: D-shaped half (print ×2) |
-| <img src="CAD_Design/images/HackathonStaff6.png" width="60"> | [`HackathonStaff6.SLDPRT`](CAD_Design/HackathonStaff6.SLDPRT) | Segment 6: top / handle end |
-| <img src="CAD_Design/images/HackathonClipping.png" width="90"> | [`HackathonClipping.SLDPRT`](CAD_Design/HackathonClipping.SLDPRT) | Clip that mounts the pod on the cane |
-| <img src="CAD_Design/images/UnbalancedMass.png" width="90"> | [`UnbalancedMass.SLDPRT`](CAD_Design/UnbalancedMass.SLDPRT) | Off-centre mass for the vibration motor |
-
-A 5 mm through-slot runs along segments 4–6 (about 0.82–1.25 m from the tip), giving a channel for wires from the pod toward the handle.
+**→ [`CAD_Design/`](CAD_Design):** SolidWorks parts, assembly order and print notes.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -216,28 +189,24 @@ python analyze_cane.py analyze  # rebuilds results/ and results/plots/
 | 3 fast strong pulses, both motors | Drop-off ahead |
 | 4 rapid strong pulses | Drop-off ahead, little time left |
 | 2 medium pulses on one side | Head-level obstacle on that side |
-| Left-then-right ring | Pod ON / calibration OK |
-| 1 soft 600 ms pulse | A sensor is down ("pod blind") |
 
-The full pattern list is in the [firmware guide](firmware/README.md#using-the-pod).
+Status and fault patterns are listed in the [firmware guide](firmware/README.md#using-the-pod).
 
 ### Live Dashboard
 
-Open the [**live dashboard**](https://ktviy.github.io/SafeRoute_Smart_Cane/dashboard/) in Chrome or Edge, power the pod, then press **USB** or **Bluetooth**. It shows cane angle, drop height, alerts and mode in real time with no install. A Python version is in [`dashboard/dashboard.py`](dashboard/dashboard.py).
+Open the [**live dashboard**](https://ktviy.github.io/SafeRoute_Smart_Cane/dashboard/) in Chrome or Edge, power the pod, then press **USB** or **Bluetooth**. Details and the Python version: [`dashboard/`](dashboard).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Experiment Data
 
-Walker P1 walked with a phone (Sensor Logger, 100 Hz) strapped to a 120 cm white cane, producing **18 recordings**: static angles, sweeping and walking with both techniques (constant contact and two-point touch), curb step-down and step-up, objects beside the path, stair tops, stair descents, and timed walks. Angles were then mapped to the 130 cm build cane ([`cane_130cm.py`](experiment_data/cane_130cm.py)).
+Every design number comes from **18 real recordings** of a white-cane user (phone IMU at 100 Hz on the cane): walking with constant-contact and two-point technique, curbs, stair tops, stair descents, objects beside the path and timed walks.
 
-| Walking, constant contact (S04) | Walking, two-point touch (S05) |
+| Walking, constant contact | Stair top found |
 | :---: | :---: |
-| ![S04](experiment_data/results/plots/S04_walk_swipe.png) | ![S05](experiment_data/results/plots/S05_walk_tap.png) |
-| **Stair top found (S11)** | **Curb step-down (S06)** |
-| ![S11](experiment_data/results/plots/S11_stairtop_swipe.png) | ![S06](experiment_data/results/plots/S06_curb_stepdown_swipe.png) |
+| ![S04](experiment_data/results/plots/S04_walk_swipe.png) | ![S11](experiment_data/results/plots/S11_stairtop_swipe.png) |
 
-All 17 plots are in [`experiment_data/results/plots/`](experiment_data/results/plots) and the numbers are in the [results report](experiment_data/results/report.md). The videos used to time-align events (179 MB) are not included; [`video_sync.csv`](experiment_data/video_sync.csv) and [`events.csv`](experiment_data/events.csv) keep the timings they produced.
+**→ [`experiment_data/`](experiment_data):** raw data, analysis scripts, all 17 plots and the [results report](experiment_data/results/report.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

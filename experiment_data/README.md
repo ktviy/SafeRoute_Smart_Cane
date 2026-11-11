@@ -1,4 +1,4 @@
-# SafeRoute cane motion analysis (experiment data)
+# Experiment Data: Cane Motion Analysis
 
 All recordings here are real: walker P1, phone (Sensor Logger app, 100 Hz) strapped to a
 120 cm white cane, 30 Oct - 3 Nov 2026. The plots in `results/plots/` are made from them.
@@ -10,6 +10,28 @@ edges, step-ups and stair rhythm. Events are found in the sensor data; the
 videos are lined up with the sensors by sound, so every event also gets its
 time in the video.
 
+## Results at a Glance
+
+| Result | Value |
+| --- | --- |
+| Cane angle while walking (120 cm cane, shaft) | 41.1° (36.5–45.1°); 36.9° on the 130 cm cane |
+| Sweep frequency / half-width (p95) | 0.45–0.49 Hz / 23–24° |
+| Frames a 30 cm drop stays in the beam (fastest sweep) | 3.9 at 30 Hz: 3-frame confirmation passes |
+| Firmware angle filter error while walking (p95) | 2.4–3.4° (about 1 cm of drop height per degree) |
+| Walking speed / warning time | 0.78–0.84 m/s / 0.79–0.86 s |
+| Cane angle after finding an edge | 63–84° peak, past 57° within 0.6–0.9 s |
+| Stair descent rhythm | 1.47 s per step |
+
+Full numbers: [`results/report.md`](results/report.md).
+
+| Walking, constant contact (S04) | Walking, two-point touch (S05) |
+| :---: | :---: |
+| ![S04](results/plots/S04_walk_swipe.png) | ![S05](results/plots/S05_walk_tap.png) |
+| **Stair top found (S11)** | **Curb step-down (S06)** |
+| ![S11](results/plots/S11_stairtop_swipe.png) | ![S06](results/plots/S06_curb_stepdown_swipe.png) |
+
+All 17 plots are in [`results/plots/`](results/plots).
+
 ## 1. Install (once)
 
 Python 3.9 or newer, then:
@@ -20,7 +42,7 @@ Python 3.9 or newer, then:
 
 ## 2. Folder
 
-    cane_analysis/
+    experiment_data/
       analyze_cane.py      the analysis
       sync_video.py        lines each video up with its sensor recording (by sound)
       log.csv              the recording log: one row per recording, measurements (open in Excel)
