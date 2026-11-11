@@ -139,6 +139,22 @@ The decision logic is plain, hardware-free C++ in [`firmware/lib/saferoute`](fir
 
 Full BOM with references, design notes and the KiCad project are in [`hardware/`](hardware).
 
+### Mechanical Design
+
+The cane and pod mount are modelled in SolidWorks; part files are in [`CAD_Design/`](CAD_Design). The 130 cm cane is a Ø22 mm rod printed in six 216.7 mm segments that join with spigot-and-socket fittings and cross-pins.
+
+| Part file | Description |
+| --- | --- |
+| [`HackathonStaff1.SLDPRT`](CAD_Design/HackathonStaff1.SLDPRT) | Segment 1: tip, rounded end |
+| [`HackathonStaff2+3.SLDPRT`](CAD_Design/HackathonStaff2+3.SLDPRT) | Segments 2 and 3 (print ×2) |
+| [`HackathonStaff4.SLDPRT`](CAD_Design/HackathonStaff4.SLDPRT) | Segment 4: crossbar at ~0.81 m from the tip for the pod mount |
+| [`HackathonStaff5.SLDPRT`](CAD_Design/HackathonStaff5.SLDPRT) | Segment 5: D-shaped half (print ×2) |
+| [`HackathonStaff6.SLDPRT`](CAD_Design/HackathonStaff6.SLDPRT) | Segment 6: top / handle end |
+| [`HackathonClipping.SLDPRT`](CAD_Design/HackathonClipping.SLDPRT) | Clip that mounts the pod on the cane |
+| [`UnbalancedMass.SLDPRT`](CAD_Design/UnbalancedMass.SLDPRT) | Off-centre mass for the vibration motor |
+
+A 5 mm through-slot runs along segments 4–6 (about 0.82–1.25 m from the tip), giving a channel for wires from the pod toward the handle.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Getting Started
@@ -226,6 +242,7 @@ SafeRoute_Smart_Cane/
 │   ├── src/                 ESP32 main loop, HAL drivers, BLE telemetry
 │   └── test/                45 native unit tests
 ├── hardware/            KiCad schematic project + SVG/PNG export
+├── CAD_Design/          SolidWorks parts: 6 cane segments, pod clip, motor mass
 ├── experiment_data/     raw cane recordings, analysis scripts, results and plots
 ├── dashboard/           web dashboard (Web Serial / Web Bluetooth) + Python version
 └── docs/                DATA REPORT: every design number and its source
